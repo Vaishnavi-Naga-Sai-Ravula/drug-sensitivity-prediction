@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from pathdsp.interface import apply_theme, molecular_intro, searchable_pair
 from pathdsp.data import build_dataset
 from pathdsp.explain import exact_group_shap, shap_feature_values
 from pathdsp.model import (
@@ -45,6 +46,8 @@ div[data-testid="stMetric"] {background: #f5f8fb; padding: .8rem 1rem; border-ra
 </style>
 """, unsafe_allow_html=True)
 
+
+apply_theme()
 
 @st.cache_data(show_spinner="Loading the supplied PathDSP matrices…")
 def get_dataset(name: str):
@@ -220,14 +223,23 @@ def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
 
 st.sidebar.markdown("## 🧬 PathDSP Lab")
 st.sidebar.caption("Pathway-based drug response research dashboard")
-page = st.sidebar.radio("Open section", ["Overview", "Predict", "Evaluation", "Explainability", "Methods & deploy"])
+page = st.sidebar.radio("Open section", ["Overview", "Predict", "Evaluation", "Explainability", "Methods & deploy"], key="navigation")
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Research use only**")
 st.sidebar.caption("Cell-line model for research and education. Not a clinical test or treatment recommendation.")
 
 
 if page == "Overview":
-    st.markdown('<section class="hero"><h1>PathDSP Lab</h1><p>Explore pathway-informed drug response predictions with model metrics and explanations.</p></section>', unsafe_allow_html=True)
+    molecular_intro()
+    def open_prediction():
+        st.session_state["navigation"] = "Predict"
+    st.button("Enter the prediction lab →", type="primary", on_click=open_prediction)
+    cards = st.columns(3)
+    for col, step, title, description in zip(cards, ("01 / EXPLORE", "02 / PREDICT", "03 / UNDERSTAND"),
+            ("Find your pair", "Connect the pathways", "See what drives it"),
+            ("Search the bundled drug and cell-line catalogues.", "Run the saved neural network on five feature groups.", "Inspect group contributions and feature explanations.")):
+        col.markdown(f'<div class="workflow-card"><small>{step}</small><h3>{title}</h3><p>{description}</p></div>', unsafe_allow_html=True)
+
     st.markdown('<div class="notice"><b>Interpretation:</b> the model predicts the supplied response target, −log10(IC50). Higher values correspond to lower IC50 under the source transformation. Values shown in μM are calculated as 10<sup>−target</sup> and inherit the source concentration unit.</div>', unsafe_allow_html=True)
     try:
         gdsc = get_dataset("GDSC")
@@ -242,18 +254,20 @@ if page == "Overview":
         if metrics_file:
             st.subheader("Latest holdout performance")
             show_metric_cards(metrics_file.get("holdout", {}))
-            st.caption(f"Validation split: {metrics_file.get('split_mode', 'pair')} holdout. The final model is then refit on all GDSC pairs for the prediction page.")
+            st.caption(f"Validation split: {metrics_file.get('split_mode', 'pair')} holdout. The deployment model uses a separate GDSC training/validation split; these are evaluation-model holdout metrics.")
         else:
             st.info("No trained model is saved yet. Open **Methods & deploy** and choose Train model.")
         show_image("target_distribution.png", "Distribution of measured GDSC drug-cell line responses")
     except Exception as exc:
         st.error(f"Could not load the PathDSP data: {exc}")
-        st.info("Expand processed_data.zip in the project folder, or add app_data/pathdsp_core.zip.")
+        st.info("Restore app_data/pathdsp_core.zip from Git; no external input archives are required.")
 
 elif page == "Predict":
     st.title("Predict drug response")
     st.caption("Choose a measured drug and cell line from the supplied GDSC or CCLE feature matrices, or upload PathDSP-ready feature rows.")
     source = st.radio("Feature source", ["GDSC", "CCLE"], horizontal=True)
+    if source == "CCLE":
+        st.warning("External validation: this GDSC-trained model transfers poorly to CCLE (saved evaluation R² < 0). Large differences from measured values are expected; use this mode for exploratory comparison.")
     try:
         bundle = get_dataset(source)
         model, metadata = get_deploy_model(tuple(bundle.feature_names))
@@ -261,11 +275,12 @@ elif page == "Predict":
         st.error(f"Prediction model or features are unavailable: {exc}")
         st.stop()
 
+    drugs, cells = searchable_pair(bundle, f"predict_{source}")
     with st.form("pair_prediction"):
         c1, c2 = st.columns(2)
-        drug = c1.selectbox("Drug", sorted(bundle.drug_ids, key=str.casefold))
-        cell = c2.selectbox("Cancer cell line", sorted(bundle.cell_ids, key=str.casefold))
-        submitted = st.form_submit_button("Predict response", type="primary")
+        drug = c1.selectbox("Drug", drugs, key=f"drug_{source}", help="Search above or type inside this dropdown.")
+        cell = c2.selectbox("Cancer cell line", cells, key=f"cell_{source}", help="Search above or type inside this dropdown.")
+        submitted = st.form_submit_button("Predict response", type="primary", disabled=not drugs or not cells)
     if submitted:
         raw_x = bundle.pair_features(drug, cell).reshape(1, -1)
         x_scaled = standardize_transform(
@@ -282,9 +297,14 @@ elif page == "Predict":
                   delta=None if actual is None else f"{predicted - actual:+.3f} predicted − observed")
         st.caption("*The μM conversion assumes the supplied target was formed from IC50 measured in μM. Always check the source assay metadata before interpreting concentration values.")
         if actual is not None:
+            log_error = abs(predicted - actual)
+            fold_error = float(np.power(10.0, min(log_error, 20)))
+            st.info(f"Comparison with measurement: absolute log-scale error {log_error:.3f}; concentration difference {fold_error:.2f}×. A 1.0 difference on the log scale means a tenfold IC50 difference.")
+            if log_error > 0.5:
+                st.warning("This pair has a substantial prediction error. The measured value and model estimate are shown separately; this estimate should not be treated as an accurate replacement for the measurement.")
             st.write(f"Observed IC50 (μM, converted): **{ic50_from_target(actual):.4g}**")
             if source == "GDSC":
-                st.caption("This pair is part of the GDSC reference table used to fit the deployable model. Treat this row as an in-sample illustration; use the held-out table and metrics for performance claims.")
+                st.caption("This pair is part of the GDSC reference table used to develop the deployable model. Treat this row as a development-data illustration; use the held-out table and metrics for performance claims.")
             result = pd.DataFrame([{
                 "dataset": source, "drug": drug, "cell": cell,
                 "actual_neglog10_ic50": actual, "predicted_neglog10_ic50": predicted,
@@ -388,8 +408,11 @@ elif page == "Explainability":
     except Exception as exc:
         st.error(f"Model or feature data are unavailable: {exc}")
         st.stop()
-    drug = st.selectbox("Drug for local explanation", sorted(bundle.drug_ids, key=str.casefold), key="explain_drug")
-    cell = st.selectbox("Cell line for local explanation", sorted(bundle.cell_ids, key=str.casefold), key="explain_cell")
+    drugs, cells = searchable_pair(bundle, "explain")
+    if not drugs or not cells:
+        st.stop()
+    drug = st.selectbox("Drug for local explanation", drugs, key="explain_drug")
+    cell = st.selectbox("Cell line for local explanation", cells, key="explain_cell")
     raw_x = bundle.pair_features(drug, cell).reshape(1, -1)
     medians = np.asarray(metadata["imputation_medians"], dtype=np.float32)
     means = np.asarray(metadata["scaler_means"], dtype=np.float32)
@@ -544,7 +567,7 @@ elif page == "Methods & deploy":
                 status.update(label="Training failed", state="error")
                 st.exception(exc)
     st.markdown("### Run locally")
-    st.code("python -m venv .venv\n.venv\\Scripts\\Activate.ps1  # Windows\npip install -r requirements.txt\npython train.py --split pair --epochs 30\nstreamlit run app.py", language="powershell")
+    st.code("python -m venv .venv\n.venv\\Scripts\\Activate.ps1  # Windows\npip install -r requirements.txt\nstreamlit run app.py", language="powershell")
     st.markdown("### Deploy")
     st.markdown("1. Push the app files, `app_data/pathdsp_core.zip` and the trained `artifacts/` folder to a GitHub repository. Keep raw omics files and the full PPI bundle out of the deployment repo.\n2. In Streamlit Community Cloud, create an app from that repo and set the entry point to `app.py`.\n3. For a container deployment, build with the included `Dockerfile`; the app listens on port 8501.\n4. Share the published URL after checking it with the included sample drug and cell line.")
     st.markdown("### Research paper and upstream code")

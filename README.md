@@ -67,3 +67,53 @@ This is an educational and research prototype built from public cell-line data. 
 
 The scientific method and supplied source implementation are by Tang and Gottlieb, “Explainable drug sensitivity prediction through cancer pathway enrichment,” *Scientific Reports* 11, 3128 (2021). The author's repository and MIT license are preserved in `PathDSP-main/`. See its README for data-processing references and upstream citations.
 
+
+## Interface and repository-only setup
+
+The dashboard runs using the committed `app_data/pathdsp_core.zip`, `artifacts/`,
+`pathdsp/`, and `ui/` files. Neither `input.zip` nor `PathDSP-main.zip` is needed
+for prediction, explanations, or training with the bundled processed features.
+Keep any original archives as optional backups outside the repository.
+
+The Overview opens with an interactive, locally rendered molecular illustration.
+It is decorative, not a chemical structure for the selected drug. Use **Pause
+motion** to stop rotation; the illustration also respects reduced-motion settings.
+Choose **Enter the prediction lab** to begin. In Predict and Explainability, type
+part of a drug or cell-line name in the search fields, then choose a matching
+identifier. Search ignores capitalization; a unique match is selected automatically.
+Only identifiers from the selected dataset can be submitted.
+
+To update an existing Windows Git checkout, first back up or commit local changes,
+then open PowerShell in the project directory:
+
+```powershell
+git pull --ff-only origin main
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+streamlit run app.py
+```
+
+For a folder downloaded as a ZIP, download the updated repository ZIP from GitHub
+and extract it to a new folder to preserve local files. Create a virtual environment
+and install requirements as described above; retraining is unnecessary because a
+saved model is included. Interface checks: `python -m unittest discover -s tests`.
+
+### Prediction accuracy audit
+
+`outputs/deployment_model_audit.json` records a fresh audit of the committed
+model on all bundled pairs. Its GDSC MAE is 0.179 and RMSE 0.237; these are
+**development-data** results, not independent holdout scores. External CCLE MAE
+is 0.866, RMSE 1.088 and R² −0.533. The median IC50 discrepancy is approximately
+1.39× on GDSC and 5.53× on CCLE. A log-response error of 1 means a tenfold
+concentration difference, which can make differences in μM look especially large.
+Feature ordering and saved scaling were checked; this audit does not establish a
+preprocessing defect. The interface now displays each measured pair's log error
+and fold difference and warns about poor external transfer. Model weights have
+not been altered: improving CCLE accuracy requires a separately evaluated training
+study, and exact agreement cannot be promised by an interface change. The saved
+model uses a 90/10 GDSC training/validation split, despite earlier documentation
+that described fitting on all GDSC rows.
+
+Use the sidebar **Dark mode** switch to choose a light or dark workspace. The
+choice remains active while navigating the current session. Reproduce the saved
+model audit with `python scripts/audit_model.py`; it updates only the audit JSON.

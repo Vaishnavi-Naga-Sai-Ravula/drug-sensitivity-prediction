@@ -1,0 +1,28 @@
+{
+  "GDSC": {
+    "scope": "saved deployment model; GDSC includes development/training rows, not independent validation",
+    "metrics": {
+      "n_test": 37732,
+      "mae_neglog10_ic50": 0.1787240109017264,
+      "rmse_neglog10_ic50": 0.23716037289049618,
+      "r2": 0.9611864650908682,
+      "pearson_r": 0.9810262781716995,
+      "spearman_r": 0.9703337424204302
+    },
+    "median_absolute_log_error": 0.1429552435874939,
+    "median_concentration_fold_error": 1.3898093700408936
+  },
+  "CCLE": {
+    "scope": "saved GDSC-trained deployment model evaluated externally on CCLE; no CCLE fitting",
+    "metrics": {
+      "n_test": 10602,
+      "mae_neglog10_ic50": 0.8664294139989457,
+      "rmse_neglog10_ic50": 1.088252065631115,
+      "r2": -0.5330149921720098,
+      "pearson_r": 0.5050699020669247,
+      "spearman_r": 0.3505449960602729
+    },
+    "median_absolute_log_error": 0.7424960136413574,
+    "median_concentration_fold_error": 5.527083396911621
+  }
+}
