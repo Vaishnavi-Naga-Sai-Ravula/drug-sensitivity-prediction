@@ -113,7 +113,7 @@ study, and exact agreement cannot be promised by an interface change. The saved
 model uses a 90/10 GDSC training/validation split, despite earlier documentation
 that described fitting on all GDSC rows.
 
-Use the sidebar **Dark mode** switch to choose a light or dark workspace. The
+Use the top **Dark mode** switch to choose a light or dark workspace. The
 choice remains active while navigating the current session. Reproduce the saved
 model audit with `python scripts/audit_model.py`; it updates only the audit JSON.
 
@@ -122,7 +122,7 @@ model audit with `python scripts/audit_model.py`; it updates only the audit JSON
 The landing experience now fills a large responsive scene with interactive
 molecule, cell-landscape and pathway-network views. Every section has its own
 animated banner. Light and dark palettes, mobile navigation, pause controls and
-OS/sidebar reduced-motion options are supported. The art is illustrative.
+OS/top-bar reduced-motion options are supported. The art is illustrative.
 
 Prediction uploads now have explicit size, numeric-value and missingness checks.
 Artifacts have consistency hashes; inference concurrency and batch sizes are
@@ -134,3 +134,45 @@ See [release evidence, accuracy limits and deployment instructions](docs/READINE
 The current CCLE transfer performance remains poor. **This is not a clinically
 validated or universally production-ready model.** Three alternative-model trials
 failed to improve the existing GDSC holdout score, so the weights were retained.
+
+## Evaluation reports, populated samples and pathway comparisons
+
+Use the horizontal navigation above the workspace. Overview presents the workflow;
+the GDSC response distribution and validation evidence are in **Evaluation**.
+Predict now downloads populated CSV and TSV examples containing five real rows and
+all model features; these can be uploaded directly. Feature-level SHAP downloads
+include all features, even though plots display only the largest contributions.
+
+Make a prediction, then open Evaluation: its reference drug and cell line follow
+your last prediction. You can also choose a different pair there. The app compares
+all eligible drugs for that cell line, reports measured and predicted IC50 values
+separately, and explains the selected pair with exact group SHAP and approximate
+feature/pathway SHAP. Lower model-estimated IC50 is a **research ranking**, not a
+clinical recommendation; toxicity, achievable dose and patient outcomes are absent.
+No one-to-one drug–pathway assignment is supplied. API keys do not improve model
+accuracy by themselves. The FNN remains a baseline with known CCLE transfer limits.
+
+Choose **Prepare complete report and evidence bundle** in Evaluation. The standalone
+HTML report includes every evaluation figure, reference-drug comparisons, complete
+expandable data tables, SHAP graphs, metric/audit records and model identity.
+The ZIP includes the same HTML plus every table as CSV and every figure as PNG.
+On-screen previews and filters do not truncate the exported data. Open the HTML
+in a browser to read or print it. No patient health records exist in these inputs;
+tables explicitly mark patient health status as unavailable instead of inventing it.
+
+### Windows artifact-integrity error
+
+JSON metadata hashing now tolerates Git's LF→CRLF line-ending conversion on Windows;
+model binaries and actual metadata content remain checked. `.gitattributes` also
+keeps JSON files in LF form. Stop Streamlit, pull the latest commit and restart.
+If the error persists because your local bundle actually differs, preserve and
+restore it with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\restore_artifacts.py
+```
+
+This checks the committed bundle, backs up existing artifacts to a verified ZIP
+under `.local_backups/`, then restores the three matching files from local Git
+HEAD. Restart Streamlit afterwards. It does not retrain or silently bless altered
+scalers. Keep the backup if you previously trained a local model.

@@ -16,6 +16,7 @@ from pathdsp.validation import read_feature_upload
 from pathdsp.data import build_dataset
 from pathdsp.explain import exact_group_shap, shap_feature_values
 from pathdsp.model import (
+    artifact_digest,
     fit_and_evaluate,
     fit_final_model,
     load_model_bundle,
@@ -227,12 +228,7 @@ def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
     return metrics
 
 
-st.sidebar.markdown("## 🧬 PathDSP Lab")
-st.sidebar.caption("Pathway-based drug response research dashboard")
-page = st.sidebar.radio("Open section", ["Overview", "Predict", "Evaluation", "Explainability", "Methods & deploy"], key="navigation")
-st.sidebar.markdown("---")
-st.sidebar.markdown("**Research use only**")
-st.sidebar.caption("Cell-line model for research and education. Not a clinical test or treatment recommendation.")
+page = st.radio("Workspace section", ["Overview", "Predict", "Evaluation", "Explainability", "Methods & deploy"], horizontal=True, key="navigation", label_visibility="collapsed")
 
 
 molecular_intro(page)
@@ -247,27 +243,22 @@ if page == "Overview":
             ("Search the bundled drug and cell-line catalogues.", "Run the saved neural network on five feature groups.", "Inspect group contributions and feature explanations.")):
         col.markdown(f'<div class="workflow-card"><small>{step}</small><h3>{title}</h3><p>{description}</p></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="notice"><b>Interpretation:</b> the model predicts the supplied response target, −log10(IC50). Higher values correspond to lower IC50 under the source transformation. Values shown in μM are calculated as 10<sup>−target</sup> and inherit the source concentration unit.</div>', unsafe_allow_html=True)
-    try:
-        gdsc = get_dataset("GDSC")
-        metrics_file = get_saved_metrics()
-        st.subheader("Project snapshot")
-        a, b, c, d = st.columns(4)
-        a.metric("Drug-cell response pairs", f"{len(gdsc.y):,}")
-        b.metric("Drugs with complete drug features", f"{len(gdsc.drug_ids):,}")
-        c.metric("Cell lines with complete cell features", f"{len(gdsc.cell_ids):,}")
-        d.metric("Model input features", f"{len(gdsc.feature_names):,}")
-        st.caption("Inputs: Morgan fingerprints, DG-Net, EXP/ssGSEA, MUT-Net and CNV-Net pathway features.")
-        if metrics_file:
-            st.subheader("Latest holdout performance")
-            show_metric_cards(metrics_file.get("holdout", {}))
-            st.caption(f"Validation split: {metrics_file.get('split_mode', 'pair')} holdout. The deployment model uses a separate GDSC training/validation split; these are evaluation-model holdout metrics.")
-        else:
-            st.info("No trained model is saved yet. Open **Methods & deploy** and choose Train model.")
-        show_image("target_distribution.png", "Distribution of measured GDSC drug-cell line responses")
-    except Exception as exc:
-        st.error(f"Could not load the PathDSP data: {exc}")
-        st.info("Restore app_data/pathdsp_core.zip from Git; no external input archives are required.")
+    st.subheader("From a question to an evidence trail")
+    left, right = st.columns(2)
+    with left:
+        st.markdown("""### Explore a research question
+Search for a drug and a cancer **cell line**, compare model estimates with available measurements, then inspect alternatives ranked for the same cell line. Evaluation brings the comparisons, pathway attributions and downloadable evidence together.
+
+### What the model reads
+Chemical fingerprints describe drug chemistry. DG-Net describes drug-target pathway enrichment. Expression, mutation and copy-number pathway features describe the cell line. They are numeric features, not a one-drug-per-pathway assignment.
+""")
+    with right:
+        st.markdown("""### Understand before interpreting
+An explanation shows how the model used its inputs; it does not prove that a pathway causes drug response. Predicted IC50 comparisons are exploratory and do not include achievable exposure, toxicity or patient outcomes.
+
+### Keep a reproducible record
+Download populated feature examples from Predict. In Evaluation, export a structured report and a complete evidence bundle with prediction tables, visualizations, SHAP values, model identity and known limitations. No patient health information is present in this dataset.
+""")
 
 elif page == "Predict":
     st.title("Predict drug response")
@@ -325,6 +316,10 @@ elif page == "Predict":
             "dataset": source, "drug": drug, "cell": cell,
             "actual_neglog10_ic50": actual, "predicted_neglog10_ic50": predicted,
             "actual_ic50_uM": None if actual is None else ic50_from_target(actual), "predicted_ic50_uM": ic50_from_target(predicted),
+            "absolute_log_error": None if actual is None else abs(predicted-actual),
+            "concentration_fold_error": None if actual is None else float(10 ** min(abs(predicted-actual),20)),
+            "model_sha256": artifact_digest(ARTIFACT_DIR / "model.pt"),
+            "patient_health_status": "Unavailable — cell-line dataset; no patient records",
         }])
         st.download_button("Download this prediction", result.to_csv(index=False), "pathdsp_prediction.csv", "text/csv")
         group_values = saved_prediction["groups"]
@@ -345,8 +340,11 @@ elif page == "Predict":
     st.markdown("---")
     st.subheader("Batch predictions from a PathDSP-ready CSV/TSV")
     st.caption("The file must contain all model feature columns with the same definitions and units. Blank values (up to 20% per row) use training medians. Nonnumeric or infinite features are rejected. Limit: 2,048 rows / 20 MB.")
-    st.download_button("Download feature-column template", pd.DataFrame(columns=metadata["feature_names"]).to_csv(index=False),
-                       "pathdsp_feature_template.csv", "text/csv")
+    from pathdsp.evaluation import sample_features
+    example = sample_features(bundle)
+    st.download_button("Download populated feature example (CSV)", example.to_csv(index=False), "pathdsp_feature_example.csv", "text/csv")
+    st.download_button("Download populated feature example (TSV)", example.to_csv(index=False, sep="\t"), "pathdsp_feature_example.tsv", "text/tab-separated-values")
+    st.caption("The example contains five real drug–cell feature rows, every required model feature, and identifier columns. It can be uploaded directly. Response targets are deliberately excluded from model inputs.")
     uploaded = st.file_uploader("Upload feature rows", type=["csv", "tsv", "txt"], key="batch_upload")
     if uploaded is not None:
         try:
@@ -364,76 +362,8 @@ elif page == "Predict":
             st.error(str(exc))
 
 elif page == "Evaluation":
-    st.title("Model evaluation")
-    metrics_file = get_saved_metrics()
-    if not metrics_file:
-        st.info("Train the model first to generate holdout predictions and evaluation plots.")
-        st.stop()
-    holdout = metrics_file.get("holdout", {})
-    show_metric_cards(holdout)
-    st.caption("Regression metrics are calculated on a held-out set. The ROC/AUC and confusion matrix below are exploratory only: labels use the training-set median response as a visualization threshold, not a validated clinical cutoff.")
-    binary = {key.removeprefix("exploratory_"): holdout[key] for key in
-              ["exploratory_accuracy", "exploratory_precision", "exploratory_recall",
-               "exploratory_specificity", "exploratory_f1", "exploratory_auc"] if key in holdout}
-    if binary:
-        st.dataframe(pd.DataFrame([{"Exploratory median-split metric": key, "Value": value}
-                                   for key, value in binary.items()]), width="stretch", hide_index=True)
-    predictions_path = OUTPUT_DIR / "holdout_predictions.csv"
-    if predictions_path.is_file():
-        import altair as alt
-        holdout_frame = pd.read_csv(predictions_path)
-        st.subheader("Explore held-out predictions")
-        selected_drug = st.selectbox("Inspect a held-out drug", ["All drugs"] + sorted(holdout_frame["drug"].unique(), key=str.casefold))
-        visible = holdout_frame if selected_drug == "All drugs" else holdout_frame[holdout_frame["drug"] == selected_drug]
-        st.caption(f"{len(visible):,} held-out pairs in this view. Showing up to 5,000 points; overall scores above use the complete holdout. Hover for identifiers; drag or scroll to explore.")
-        plot_frame = visible.sample(n=min(5000, len(visible)), random_state=42)
-        low = float(min(visible["actual_neglog10_ic50"].min(), visible["predicted_neglog10_ic50"].min()))
-        high = float(max(visible["actual_neglog10_ic50"].max(), visible["predicted_neglog10_ic50"].max()))
-        points = alt.Chart(plot_frame).mark_circle(size=32, opacity=.65).encode(
-            x=alt.X("actual_neglog10_ic50:Q", title="Observed −log10(IC50)"),
-            y=alt.Y("predicted_neglog10_ic50:Q", title="Predicted −log10(IC50)"),
-            color=alt.Color("absolute_error:Q", scale=alt.Scale(scheme="tealblues"), title="Absolute log error"),
-            tooltip=["drug:N", "cell:N", alt.Tooltip("actual_neglog10_ic50:Q", format=".3f"), alt.Tooltip("predicted_neglog10_ic50:Q", format=".3f"), alt.Tooltip("absolute_error:Q", format=".3f")])
-        diagonal = alt.Chart(pd.DataFrame({"observed":[low,high], "predicted":[low,high]})).mark_line(color="#e99c80", strokeDash=[5,5]).encode(x="observed:Q", y="predicted:Q")
-        foreground = "#deedf5" if st.session_state.get("dark_mode") else "#173b4c"
-        chart = (points + diagonal).properties(height=420).interactive().configure(background="transparent").configure_axis(labelColor=foreground, titleColor=foreground, gridColor="#52778933").configure_legend(labelColor=foreground, titleColor=foreground).configure_view(strokeOpacity=0)
-        st.altair_chart(chart, width="stretch")
-        st.caption("Dashed line: exact agreement. This is the held-out evaluation model, not a plot of deployment-model training fit.")
-    with st.expander("Saved diagnostic figure gallery"):
-        left, right = st.columns(2)
-        with left:
-            show_image("actual_vs_predicted.png", "Held-out observed versus predicted response")
-            show_image("roc_curve.png", "Exploratory ROC curve using the training median as a threshold")
-            show_image("correlation_heatmap.png", "Correlation matrix for the most variable test-set features and target")
-        with right:
-            show_image("residual_diagnostics.png", "Held-out residual diagnostics")
-            show_image("confusion_matrix.png", "Exploratory confusion matrix using the training median")
-            show_image("target_distribution.png", "Distribution of measured GDSC responses")
-            show_image("training_curve.png", "Training and validation RMSE over epochs")
-            show_image("global_group_shap.png", "Global mean absolute SHAP contribution by feature group")
-    if "ccle_external" in metrics_file:
-        st.subheader("Independent CCLE evaluation")
-        external = metrics_file["ccle_external"]
-        cols = st.columns(4)
-        for col, (label, key) in zip(cols, [("External MAE", "mae_neglog10_ic50"),
-                                             ("External RMSE", "rmse_neglog10_ic50"),
-                                             ("External R²", "r2"), ("Pearson r", "pearson_r")]):
-            col.metric(label, f"{external.get(key, float('nan')):.3f}")
-        st.caption("The model was trained on GDSC and evaluated on CCLE. Assay ranges differ between datasets, so interpret the external error separately.")
-        file = OUTPUT_DIR / "ccle_external_predictions.csv"
-        if file.is_file():
-            st.download_button("Download CCLE actual/predicted table", file.read_bytes(), "ccle_external_predictions.csv", "text/csv")
-    predictions_path = OUTPUT_DIR / "holdout_predictions.csv"
-    if predictions_path.is_file():
-        st.download_button("Download GDSC holdout actual/predicted table", predictions_path.read_bytes(), "holdout_predictions.csv", "text/csv")
-    with st.expander("Reproducibility metadata"):
-        st.json(metrics_file)
-    st.subheader("Data integrity and deployment-model audit")
-    for filename in ("data_quality_audit.json", "deployment_model_audit.json", "model_comparison.json"):
-        audit_path = OUTPUT_DIR / filename
-        if audit_path.is_file():
-            with st.expander(filename.replace("_", " ").removesuffix(".json").title()):
-                st.json(json.loads(audit_path.read_text(encoding="utf-8")))
+    from pathdsp.evaluation_ui import render_evaluation
+    render_evaluation(get_dataset, get_deploy_model)
 
 elif page == "Explainability":
     st.title("Model explanations")
@@ -492,9 +422,7 @@ elif page == "Explainability":
             background = standardize_transform(background_raw, medians, means, scales)
             try:
                 values = shap_feature_values(model, background, x_scaled[0], nsamples=64)
-                top_ids = np.argsort(np.abs(values))[-25:]
-                feature_frame = pd.DataFrame({"feature": np.asarray(metadata["feature_names"])[top_ids],
-                                              "shap_value": values[top_ids]})
+                feature_frame = pd.DataFrame({"feature": metadata["feature_names"], "shap_value": values})
                 st.session_state["local_feature_shap_pair"] = (drug, cell)
                 st.session_state["local_feature_shap_frame"] = feature_frame
             except Exception as exc:
@@ -508,7 +436,7 @@ elif page == "Explainability":
         )
         st.subheader("Feature-level local explanation report")
         st.markdown(local_report)
-        display_frame = feature_frame.sort_values("shap_value")
+        display_frame = feature_frame.assign(magnitude=feature_frame["shap_value"].abs()).nlargest(25,"magnitude").sort_values("shap_value")
         fig, ax = plt.subplots(figsize=(9, 7))
         ax.barh(display_frame["feature"], display_frame["shap_value"],
                 color=[PALETTE["teal"] if v >= 0 else PALETTE["rose"] for v in display_frame["shap_value"]])

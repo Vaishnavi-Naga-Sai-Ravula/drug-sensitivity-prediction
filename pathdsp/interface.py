@@ -4,22 +4,25 @@ from pathlib import Path
 import streamlit as st
 
 def apply_theme():
-    dark = st.sidebar.toggle("Dark mode", value=False, key="dark_mode")
-    st.sidebar.toggle("Reduce motion", value=False, key="reduce_motion")
+    brand, theme, motion = st.columns([5, 1.3, 1.5])
+    brand.markdown("**🧬 PATHDSP LAB** · Research workspace")
+    dark = theme.toggle("Dark mode", value=False, key="dark_mode")
+    motion.toggle("Reduce motion", value=False, key="reduce_motion")
     st.markdown('''<style>
     .stApp{background:linear-gradient(145deg,#edf5f8,#fff 60%,#eaf7f3)}
-    .block-container{max-width:1580px;padding:1.5rem 3rem 4rem}
+    .block-container{max-width:1580px;padding:4rem 3rem 4rem}
     [data-testid="stHeader"]{background:transparent}
-    [data-testid="stSidebar"]{border-right:1px solid #345264}
-    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){background:#1d495a;border-left:3px solid #7cf4d4}
+    .st-key-navigation [role="radiogroup"]{display:flex;gap:8px;flex-wrap:wrap;padding:8px;background:#b6d4df25;border:1px solid #aac7d640;border-radius:18px}
+    .st-key-navigation [role="radiogroup"] label{padding:10px 18px;border-radius:12px;margin:0!important}
+    .st-key-navigation [role="radiogroup"] label:has(input:checked){background:#137d7c;color:white!important}
+    .st-key-navigation [role="radiogroup"] label:has(input:checked) p{color:white!important}
+    .st-key-navigation [role="radiogroup"] label:focus-within{outline:2px solid #2b9f9b;outline-offset:2px}
+    .st-key-navigation [role="radiogroup"] label:hover{box-shadow:inset 0 0 0 1px #65cbbb}
     .stApp:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 85% 5%,#45b7ac13,transparent 50%);z-index:0}
     .workflow-card{transition:transform .25s,box-shadow .25s}
     .workflow-card:hover{transform:translateY(-5px);box-shadow:0 15px 40px #173b4c15}
-    @media(max-width:700px){.block-container{padding:1rem 1rem 3rem}}
+    @media(max-width:700px){.block-container{padding:4rem 1rem 3rem}}
     @media(prefers-reduced-motion:reduce){.workflow-card{transition:none}.workflow-card:hover{transform:none}}
-    [data-testid="stSidebar"]{background:#0b2233}
-    [data-testid="stSidebar"] *{color:#d7edf4}
-    [data-testid="stSidebar"] [role="radiogroup"] label{padding:10px;border-radius:10px}
     h1,h2,h3{letter-spacing:-.035em;color:#102d40}
     div[data-testid="stMetric"]{background:white;border:1px solid #dbe9ee;border-radius:16px;padding:18px;box-shadow:0 5px 20px #173b4c08}
     .stButton>button[kind="primary"],.stFormSubmitButton>button{border-radius:12px;background:#117b79;color:white;border:0;padding:.65rem 1.2rem}

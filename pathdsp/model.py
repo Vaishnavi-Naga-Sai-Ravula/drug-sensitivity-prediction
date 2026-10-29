@@ -253,6 +253,14 @@ def fit_final_model(
     return {"model": model, "history": history, "medians": medians, "means": means, "scales": scales}
 
 
+def artifact_digest(path: Path) -> str:
+    """Ignore Git's Windows CRLF conversion in JSON, never in model binaries."""
+    content = path.read_bytes()
+    if path.suffix == ".json":
+        content = content.replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
+
+
 def save_model_bundle(model: PathDSPFNN, feature_names: list[str], feature_groups: dict[str, list[int]],
                       medians: np.ndarray, means: np.ndarray, scales: np.ndarray, threshold: float,
                       path: Path, training_metrics: dict | None = None) -> None:
@@ -276,7 +284,7 @@ def save_model_bundle(model: PathDSPFNN, feature_names: list[str], feature_group
         staged = Path(directory)
         torch.save(model.state_dict(), staged / "model.pt")
         (staged / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        manifest = {filename: hashlib.sha256((staged / filename).read_bytes()).hexdigest() for filename in ("model.pt", "metadata.json")}
+        manifest = {filename: artifact_digest(staged / filename) for filename in ("model.pt", "metadata.json")}
         (staged / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         for filename in ("model.pt", "metadata.json", "manifest.json"):
             os.replace(staged / filename, path / filename)
@@ -292,7 +300,7 @@ def load_model_bundle(path: Path, expected_features: list[str] | None = None) ->
         raise ValueError("Model integrity manifest is missing. Restore artifacts/manifest.json with its matching model and metadata.")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     for filename in ("model.pt", "metadata.json"):
-        if hashlib.sha256((path / filename).read_bytes()).hexdigest() != manifest.get(filename):
+        if artifact_digest(path / filename) != manifest.get(filename):
             raise ValueError(f"Artifact integrity check failed for {filename}. Restore a matching model bundle.")
     model = PathDSPFNN(len(metadata["feature_names"]))
     state = torch.load(path / "model.pt", map_location="cpu", weights_only=True)

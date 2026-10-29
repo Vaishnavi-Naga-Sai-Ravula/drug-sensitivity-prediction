@@ -6,11 +6,12 @@ accuracy, and operational production readiness are separate properties.
 
 ## What was checked
 
-- Thirteen integration/unit tests: navigation/search in both datasets, theme switching,
+- Nineteen integration/unit tests: navigation/search in both datasets, theme switching,
   prediction/observation separation, malformed/missing/infinite upload rejection,
   batch limits, archive-only loading, CSV feature-order consistency, serving-mode
   training protection, artifact corruption, external-transfer warnings, API readiness
-  and request validation. Run `python -m unittest discover -s tests -v` after
+  and request validation, populated samples, complete report export, ranking
+  correctness, Windows JSON line-ending compatibility and backup-first recovery. Run `python -m unittest discover -s tests -v` after
   installing `requirements-api.txt`. The API test skips if optional dependencies
   are absent; a skipped test is not a validated API.
 - Chromium: 1600px desktop and 390px mobile, both themes, all five sections,
@@ -116,6 +117,14 @@ Neither `input.zip` nor `PathDSP-main.zip` is read by the app, API, or audits.
 The committed compact `app_data/pathdsp_core.zip` is needed. Keep it and the
 `ui/`, `pathdsp/`, and `artifacts/` directories when deploying.
 
+## Report and Windows compatibility update
+
+Navigation is horizontal. Evaluation includes pair-specific research rankings,
+pathway/group SHAP, full self-contained HTML and evidence-ZIP downloads. Patient
+health is unavailable and is never inferred. JSON hashing ignores only CRLF/LF
+line-ending differences; real metadata corruption still fails. The recovery helper
+backs up local files before restoring a verified committed bundle.
+
 ## Visual review
 
 Screenshots captured in Chromium from the running app:
@@ -125,3 +134,9 @@ Screenshots captured in Chromium from the running app:
 | ![Large interactive light workspace](screenshots/overview-light.png) | ![Large interactive dark workspace](screenshots/overview-dark.png) |
 
 [Mobile light workspace](screenshots/mobile-light.png).
+
+[Structured report preview](screenshots/report-preview.png). The standalone HTML
+embeds every figure and full expandable tables. The ZIP contains untruncated CSVs
+and PNGs. Browser validation downloaded and reopened the report and checked all
+embedded images. Separate CCLE pair evaluation, rankings and pathway SHAP were
+also exercised. No patient health records or treatment efficacy were inferred.

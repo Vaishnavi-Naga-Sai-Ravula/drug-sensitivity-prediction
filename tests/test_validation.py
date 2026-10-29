@@ -106,6 +106,17 @@ class InferenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'manifest is missing'):
                 load_model_bundle(path)
 
+    def test_windows_line_endings_do_not_break_artifact_integrity(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            for name in ('model.pt', 'metadata.json', 'manifest.json'):
+                shutil.copyfile(root / 'artifacts' / name, path / name)
+            content=(path / 'metadata.json').read_bytes().replace(b'\r\n',b'\n')
+            (path / 'metadata.json').write_bytes(content.replace(b'\n',b'\r\n'))
+            _, metadata=load_model_bundle(path)
+            self.assertEqual(metadata['feature_names'],self.metadata['feature_names'])
+
     def test_ccle_external_limitation_is_returned(self):
         bundle = dataset_resource('CCLE')
         response = predict_pairs('CCLE', [(bundle.drug_ids[0], bundle.cell_ids[0])])

@@ -10,13 +10,13 @@ class SearchTests(unittest.TestCase):
 
     def test_landing_navigation_and_search(self):
         app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=90).run()
-        app.sidebar.toggle[0].set_value(True).run()
+        app.toggle[0].set_value(True).run()
         self.assertFalse(app.exception)
-        app.sidebar.toggle[0].set_value(False).run()
+        app.toggle[0].set_value(False).run()
         app.button[0].click().run()
-        self.assertEqual(app.sidebar.radio[0].value, 'Predict')
+        self.assertEqual(app.radio[0].value, 'Predict')
         for source in ('GDSC', 'CCLE'):
-            app.radio[0].set_value(source).run()
+            app.radio[1].set_value(source).run()
             drug = app.selectbox[0].options[-1]
             cell = app.selectbox[1].options[-1]
             app.text_input[0].set_value(drug.swapcase()).run()
@@ -38,7 +38,7 @@ class SearchTests(unittest.TestCase):
         from unittest.mock import patch
         with patch.dict('os.environ', {}, clear=True):
             app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=90).run()
-            app.sidebar.radio[0].set_value('Methods & deploy').run()
+            app.radio[0].set_value('Methods & deploy').run()
             training = next(button for button in app.button if 'Train model' in button.label)
             self.assertTrue(training.disabled)
             self.assertFalse(app.exception)
