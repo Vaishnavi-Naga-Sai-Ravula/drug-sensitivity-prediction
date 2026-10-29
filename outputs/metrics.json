@@ -13,99 +13,103 @@
   },
   "split_mode": "pair",
   "test_size": 0.2,
-  "max_epochs": 30,
-  "epochs_used": 28,
   "seed": 42,
+  "training_seed": 2026,
+  "max_epochs": 60,
+  "epochs_used": 51,
+  "training_recipe": "same PathDSP FNN; Xavier initialization; AdamW; MSE objective; two CPU threads; early stopping on inner validation only",
+  "model_scope": "Same evaluated checkpoint is served; no refit on held-out rows. Model selection reused a historical holdout, so this is not independent final certification.",
   "holdout": {
     "n_test": 7547,
-    "mae_neglog10_ic50": 0.3212885882067025,
-    "rmse_neglog10_ic50": 0.4321461925804353,
-    "r2": 0.8728097476474829,
-    "pearson_r": 0.9342516019627003,
-    "spearman_r": 0.9075676499358308,
-    "exploratory_threshold_neglog10_ic50": -1.2857882976531982,
-    "exploratory_auc": 0.950831812709744,
-    "exploratory_accuracy": 0.873592155823506,
-    "tn": 3281,
-    "fp": 451,
+    "mae_neglog10_ic50": 0.30971149171615747,
+    "rmse_neglog10_ic50": 0.4196726563752708,
+    "r2": 0.8800462596169928,
+    "pearson_r": 0.93851032394701,
+    "spearman_r": 0.914430354410992,
+    "exploratory_threshold_neglog10_ic50": -1.2822670936584473,
+    "exploratory_auc": 0.9537601013612695,
+    "exploratory_accuracy": 0.8806148138333112,
+    "tn": 3342,
+    "fp": 398,
     "fn": 503,
-    "tp": 3312,
-    "exploratory_precision": 0.8801488174328993,
-    "exploratory_recall": 0.8681520314547837,
-    "exploratory_specificity": 0.8791532690246516,
-    "exploratory_f1": 0.8741092636579573
+    "tp": 3304,
+    "exploratory_precision": 0.8924905456509995,
+    "exploratory_recall": 0.8678749671657473,
+    "exploratory_specificity": 0.8935828877005347,
+    "exploratory_f1": 0.8800106538820083
   },
   "ccle_external": {
     "n_test": 10602,
-    "mae_neglog10_ic50": 0.8502483488636692,
-    "rmse_neglog10_ic50": 1.0684872284617621,
-    "r2": -0.4778354245068077,
-    "pearson_r": 0.5473956559259399,
-    "spearman_r": 0.3819610041757383
+    "mae_neglog10_ic50": 0.8861970510354146,
+    "rmse_neglog10_ic50": 1.084878140452869,
+    "r2": -0.5235240659497729,
+    "pearson_r": 0.5835463887782087,
+    "spearman_r": 0.43408464317181195
   },
   "ccle_external_examples": 10602,
   "feature_shap_examples": 12,
-  "feature_shap_model": "holdout evaluation model",
+  "feature_shap_background_examples": 16,
+  "feature_shap_model": "served checkpoint; group and feature summaries use held-out examples",
   "top_feature_shap": [
-    {
-      "feature": "CHEM__mBit_11",
-      "feature_group": "CHEM",
-      "mean_absolute_shap": 0.06410390824359707,
-      "mean_signed_shap": -0.04552237846659857
-    },
-    {
-      "feature": "CHEM__mBit_220",
-      "feature_group": "CHEM",
-      "mean_absolute_shap": 0.050888562241381,
-      "mean_signed_shap": 0.016993338992591343
-    },
-    {
-      "feature": "EXP__PID_MET_PATHWAY",
-      "feature_group": "EXP",
-      "mean_absolute_shap": 0.05039007266766778,
-      "mean_signed_shap": -0.020153533573741254
-    },
-    {
-      "feature": "CHEM__mBit_12",
-      "feature_group": "CHEM",
-      "mean_absolute_shap": 0.04967044448694061,
-      "mean_signed_shap": -0.003387016723940669
-    },
-    {
-      "feature": "CHEM__mBit_49",
-      "feature_group": "CHEM",
-      "mean_absolute_shap": 0.048516164955416934,
-      "mean_signed_shap": 0.010621556689220624
-    },
-    {
-      "feature": "CHEM__mBit_0",
-      "feature_group": "CHEM",
-      "mean_absolute_shap": 0.047957502832793895,
-      "mean_signed_shap": 0.00934737878162771
-    },
     {
       "feature": "CHEM__mBit_177",
       "feature_group": "CHEM",
-      "mean_absolute_shap": 0.04634473581749388,
-      "mean_signed_shap": 0.0020773525961347277
+      "mean_absolute_shap": 0.05484533099350019,
+      "mean_signed_shap": 0.022126608194995474
     },
     {
-      "feature": "CNVNet__PID_GLYPICAN_1PATHWAY",
-      "feature_group": "CNVNet",
-      "mean_absolute_shap": 0.043096106001659716,
-      "mean_signed_shap": 0.013900252062317953
-    },
-    {
-      "feature": "CHEM__mBit_129",
+      "feature": "CHEM__mBit_231",
       "feature_group": "CHEM",
-      "mean_absolute_shap": 0.04241239559883462,
-      "mean_signed_shap": -0.022668645488749074
+      "mean_absolute_shap": 0.049246781555792346,
+      "mean_signed_shap": 0.03138446384354871
     },
     {
       "feature": "CHEM__mBit_51",
       "feature_group": "CHEM",
-      "mean_absolute_shap": 0.04050707758447584,
-      "mean_signed_shap": 0.04050707758447584
+      "mean_absolute_shap": 0.045430055212747684,
+      "mean_signed_shap": 0.045430055212747684
+    },
+    {
+      "feature": "CHEM__mBit_0",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.04493270273549096,
+      "mean_signed_shap": 0.012790883151547625
+    },
+    {
+      "feature": "CHEM__mBit_49",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.043018149653304194,
+      "mean_signed_shap": 0.017149550721073683
+    },
+    {
+      "feature": "CHEM__mBit_129",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.0407994392045163,
+      "mean_signed_shap": -0.011384005351756427
+    },
+    {
+      "feature": "CHEM__mBit_222",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.040712241881442825,
+      "mean_signed_shap": -0.01480442277822141
+    },
+    {
+      "feature": "CHEM__mBit_94",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.040028118215479414,
+      "mean_signed_shap": 0.017080895478290947
+    },
+    {
+      "feature": "CHEM__mBit_182",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.03997972635571488,
+      "mean_signed_shap": 0.019428006110405977
+    },
+    {
+      "feature": "CHEM__mBit_12",
+      "feature_group": "CHEM",
+      "mean_absolute_shap": 0.03870955764516682,
+      "mean_signed_shap": 0.003654956550621688
     }
   ]
 }

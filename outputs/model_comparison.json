@@ -1,5 +1,5 @@
 {
-  "scope": "Exploratory model selection on the existing GDSC seed-42 80/20 pair holdout; not an independent final validation. No CCLE adaptation or deployment weight change.",
+  "scope": "Historical exploratory GDSC pair-holdout comparisons; original FNN baseline and tree candidates precede the active MSE-FNN release. No independent final certification.",
   "seed": 42,
   "split": "pair",
   "n_train": 30185,
@@ -27,7 +27,13 @@
       "rmse": 0.4514443635797304,
       "r2": 0.8611963402112157,
       "seconds": 44.22269073899997
+    },
+    "mse_fnn_2026": {
+      "mae": 0.30971149171615747,
+      "rmse": 0.4196726563752708,
+      "r2": 0.8800462596169928,
+      "seconds": 189.90940934199898
     }
   },
-  "decision": "Retain FNN; no candidate beats its saved MAE and RMSE."
+  "decision": "Promote evaluated MSE-FNN checkpoint for the GDSC research workflow. GDSC MAE/RMSE improve; CCLE MAE worsens slightly and remains unreliable. Do not use for patient decisions."
 }

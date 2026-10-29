@@ -7,17 +7,16 @@ from pathlib import Path
 import base64
 import hashlib
 import json
-import threading
 import zipfile
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
 from .explain import exact_group_shap, shap_feature_values
-from .inference import infer_features
+from .inference import infer_features, pair_scope
+from .ic50 import interpretation_data, INTERPRETATION, PLOT_LOCK
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUTS = ROOT / 'outputs'
-PLOT_LOCK = threading.Lock()
 LIMITATION = ('Research cell-line comparison only. Lower predicted IC50 does not establish a safer or more effective treatment. '
               'Patient health status, toxicity, achievable exposure and patient outcomes are unavailable. '
               'CCLE transfer is poor (deployment-model external R² < 0). SHAP describes model associations, not causation.')
@@ -46,7 +45,7 @@ def build_evaluation(bundle, model, metadata, drug, cell):
     ranks['absolute_log_error'] = (ranks['predicted_neglog10_ic50'] - ranks['observed_neglog10_ic50']).abs()
     ranks['concentration_fold_error'] = 10.0 ** ranks['absolute_log_error'].clip(upper=20)
     ranks['patient_health_status'] = 'Unavailable — cell-line dataset; no patient records'
-    ranks['evidence_scope'] = 'GDSC development-data comparison' if bundle.name == 'GDSC' else 'CCLE external exploratory comparison'
+    ranks['evidence_scope'] = [bundle.name+' · '+pair_scope(bundle.name,candidate,cell) for candidate in bundle.drug_ids]
     ranks['selected_drug'] = ranks['drug'].eq(drug)
     ranks = ranks.sort_values(['predicted_ic50_uM_assuming_source_unit','drug'], kind='stable').reset_index(drop=True)
     ranks.insert(0, 'research_rank', np.arange(1, len(ranks)+1))
@@ -96,7 +95,10 @@ def build_evaluation(bundle, model, metadata, drug, cell):
                'group_baseline_neglog10_ic50':baseline,
                'group_shap_additivity_residual':float(selected.iloc[0]['predicted_neglog10_ic50']-baseline-group_frame['shap_value'].sum()),
                'limitations':LIMITATION}
+    scale_tables,scale_figures=interpretation_data(bundle,drug,float(selected.iloc[0]["predicted_neglog10_ic50"]),selected.iloc[0]["observed_neglog10_ic50"])
+    tables.update(scale_tables)
     figures = make_figures(tables, bundle.y)
+    figures.update(scale_figures)
     return {'context':context, 'metrics':metrics, 'audits':audits, 'tables':tables, 'figures':figures}
 
 
@@ -201,9 +203,10 @@ def render_report(payload):
         message=f'{len(lower)} drugs have a lower predicted IC50 than the selected drug for this cell line. These are candidates for further research, not evidence of better clinical treatment.'
     else:
         message='No drug in this catalogue has a lower predicted IC50 for this cell line. This ranking does not establish treatment efficacy.'
+    parts += ['<h2>IC50 scale, patient applicability, duration and cost</h2>', '<p>'+escape(INTERPRETATION)+'</p>', '<p>A one-unit log-response difference is a tenfold concentration difference. No patient benefit or toxicity threshold can be inferred from a value such as 9 or 16.5 μM alone. Clinical duration and cost cannot be calculated from these cell-line data.</p>', tables['clinical_dose_duration_cost_availability'].to_html(index=False,escape=True),tables['ic50_scale_reference'].to_html(index=False,escape=True),tables['ic50_same_drug_context'].to_html(index=False,escape=True,na_rep='Unavailable')]
     parts += ['<h2>2. Comparative drug ranking</h2>',f'<p>{escape(message)}</p>','<p>All eligible drugs are included below. Ranking does not account for toxicity, dose feasibility, uncertainty or patient biology.</p>','<div class="scroll">'+readable_rankings(tables['cell_line_drug_rankings']).to_html(index=False,na_rep='Unavailable',escape=True,float_format=lambda value:f'{value:.5g}')+'</div>']
     parts += ['<h2>3. Pathway and SHAP interpretation</h2>','<p>No one-to-one drug–pathway assignment is supplied. The following are model attributions for the selected drug–cell pair. Positive SHAP raises −log10(IC50), corresponding to lower estimated IC50; negative SHAP moves it in the opposite direction. Feature SHAP is approximate; group SHAP is exact over five groups.</p>',f'<p>{escape(context["feature_shap_status"])}</p>',tables['local_group_shap'].to_html(index=False,escape=True),'<h3>Largest pathway contributions</h3>',tables['local_pathway_shap'].head(25).to_html(index=False,escape=True),f'<p>Exact group additivity residual: {context["group_shap_additivity_residual"]:.3g}.</p>']
-    parts += ['<h2>4. All evaluation visualizations</h2>','<p>GDSC holdout and saved CCLE plots use the evaluation model. The selected-pair and candidate plots use the separately fitted deployment model. The response distribution is not a concentration–response dose curve.</p>']
+    parts += ['<h2>4. All evaluation visualizations</h2>','<p>The active release serves the same checkpoint used for the displayed GDSC holdout and CCLE evaluation. Fit/validation/holdout membership is recorded; the holdout has been reused for model selection and is not an independent final certification. The response distribution is not a concentration–response dose curve.</p>']
     for figure in payload['figures'].values():
         encoded=base64.b64encode(figure['png']).decode('ascii')
         parts.append(f'<figure><h3>{escape(figure["title"])}</h3><img alt="{escape(figure["title"])}" src="data:image/png;base64,{encoded}"></figure>')

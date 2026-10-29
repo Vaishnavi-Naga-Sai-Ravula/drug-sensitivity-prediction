@@ -15,11 +15,13 @@ PathDSP combines 256 Morgan fingerprint bits with drug-target DG-Net, and cell-l
 
 The response matrices are named `RESP.negLog10IC50`. This implementation treats their target as `-log10(IC50 in μM)` and converts with `IC50_μM = 10 ** (-target)`. The CCLE target floor in the supplied data is approximately `-log10(8 μM)`, consistent with the paper's reported CCLE 8 μM assay cap. Every exported row keeps the original target scale as well as the converted IC50 values.
 
-The model follows the author FNN dimensions (1000, 800, 500, 100), ELU activations and 0.1 dropout. Features are z-scored using training data only. `train.py` evaluates an untouched holdout set, optionally holds out entire drugs or cell lines, separately evaluates on CCLE, and then fits a deployment model using a separate 90/10 GDSC training/validation split for interactive inference.
+The active model retains the supplied FNN dimensions (1000, 800, 500, 100), ELU activations and 0.1 dropout. The new training recipe uses Xavier initialization, AdamW and an MSE objective. Features are standardized from fitting rows only. `scripts/train_mse.py` fits on 27,166 pairs, selects the checkpoint on 3,019 validation pairs and evaluates on 7,547 held-out pairs. That evaluated checkpoint is served directly; there is no final refit on held-out rows. The legacy `train.py` workflow is a separate experiment.
 
 ### Current run results
 
-The checked-in outputs are from one seed-42 run (30 maximum epochs, 28 used), with a random drug-cell-pair 80/20 split: GDSC holdout MAE 0.321 and RMSE 0.432 on the `-log10(IC50 in μM)` scale (R² 0.873). The separate CCLE evaluation has MAE 0.850 and RMSE 1.068 (R² -0.478) for the evaluation model, showing that transfer to CCLE is substantially less reliable. These are this implementation's run results, not the paper's scores; they are not a repeated 10-fold cross-validation result. Run `python train.py --split cell` and `python train.py --split drug` for harder generalization checks before making broad performance claims.
+The current run uses split seed 42, training seed 2026, 60 maximum epochs and early stopping after 51 epochs (best validation checkpoint at epoch 41). GDSC held-out MAE is **0.310**, RMSE **0.420**, R² **0.880**. The preceding FNN scored MAE 0.321 and RMSE 0.432 on the same historical split. This modest improvement is exploratory because the holdout has been reused across model comparisons; it is not independent final certification.
+
+External CCLE MAE is **0.886**, RMSE **1.085**, R² **−0.524**. MAE is slightly worse than the preceding deployment model's 0.866; transfer remains unreliable. No claim of improvement on both datasets is made. The screenshot's 5-Fluorouracil × SIDM00003 example now predicts about **190 μM** versus **217.8 μM** observed, rather than 16.51 μM, but this pair was in the fitting set and is not independent validation. These are this implementation's run results, not the paper's scores or repeated cross-validation.
 
 ROC/AUC and confusion-matrix charts are shown as **exploratory visualizations** only. Their response label uses the GDSC training median, not a clinical sensitivity threshold. The paper uses regression because no universal sensitive/resistant cutoff is established.
 
@@ -32,7 +34,7 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The saved model is included; retraining is unnecessary to run the app. Offline training is available with `python train.py --split pair --epochs 30`. In-app training from **Methods & deploy** is disabled unless `PATHDSP_ENABLE_TRAINING=1` is explicitly set for local research. For stricter generalization checks, run `python train.py --split cell` or `python train.py --split drug`; these evaluate on cell lines or drugs not seen during training and are more challenging than a random pair split.
+The saved model is included; retraining is unnecessary to run the app. Reproduce the active candidate with `python scripts/train_mse.py --output .local_training/mse_candidate`; this creates a candidate bundle without replacing the serving model. In-app training from **Methods & deploy** is disabled unless `PATHDSP_ENABLE_TRAINING=1` is explicitly set for local research. For stricter generalization checks, run `python train.py --split cell` or `python train.py --split drug`; these evaluate on cell lines or drugs not seen during training and are more challenging than a random pair split.
 
 ## Outputs
 
@@ -99,19 +101,9 @@ saved model is included. Interface checks: `python -m unittest discover -s tests
 
 ### Prediction accuracy audit
 
-`outputs/deployment_model_audit.json` records a fresh audit of the committed
-model on all bundled pairs. Its GDSC MAE is 0.179 and RMSE 0.237; these are
-**development-data** results, not independent holdout scores. External CCLE MAE
-is 0.866, RMSE 1.088 and R² −0.533. The median IC50 discrepancy is approximately
-1.39× on GDSC and 5.53× on CCLE. A log-response error of 1 means a tenfold
-concentration difference, which can make differences in μM look especially large.
-Feature ordering and saved scaling were checked; this audit does not establish a
-preprocessing defect. The interface now displays each measured pair's log error
-and fold difference and warns about poor external transfer. Model weights have
-not been altered: improving CCLE accuracy requires a separately evaluated training
-study, and exact agreement cannot be promised by an interface change. The saved
-model uses a 90/10 GDSC training/validation split, despite earlier documentation
-that described fitting on all GDSC rows.
+`outputs/deployment_model_audit.json` audits all bundled pairs. GDSC all-row MAE is 0.195 and RMSE 0.275; this mixes fitting, validation and holdout rows and is not a generalization score. External CCLE MAE is 0.886, RMSE 1.085 and R² −0.524. Median concentration error is about 1.40× on GDSC and 6.22× on CCLE. Use the explicit held-out metrics above when assessing generalization. `outputs/model_split_membership.csv` records each GDSC pair's role.
+
+Feature ordering, scaling and all processed tables were audited. No duplicate, infinite, nonnumeric or missing feature values required deleting rows. Observed responses are never substituted for model estimates. A one-unit log error means a tenfold concentration error; exact agreement cannot be promised. The active model was retrained, and every prediction table, SHAP summary and evaluation figure was regenerated from its evaluated checkpoint.
 
 Use the top **Dark mode** switch to choose a light or dark workspace. The
 choice remains active while navigating the current session. Reproduce the saved
@@ -132,8 +124,7 @@ checks. No uploaded raw ZIP archives are used.
 
 See [release evidence, accuracy limits and deployment instructions](docs/READINESS.md).
 The current CCLE transfer performance remains poor. **This is not a clinically
-validated or universally production-ready model.** Three alternative-model trials
-failed to improve the existing GDSC holdout score, so the weights were retained.
+validated or universally production-ready model.** Three tree-model trials failed to improve the earlier FNN. The subsequent MSE-FNN trial improved GDSC held-out scores and was promoted, with the CCLE limitation retained explicitly.
 
 ## Evaluation reports, populated samples and pathway comparisons
 
@@ -176,3 +167,32 @@ This checks the committed bundle, backs up existing artifacts to a verified ZIP
 under `.local_backups/`, then restores the three matching files from local Git
 HEAD. Restart Streamlit afterwards. It does not retrain or silently bless altered
 scalers. Keep the backup if you previously trained a local model.
+
+
+## IC50 concentration scale, clinical limits and model retraining
+
+Predict and Evaluation show a logarithmic concentration ruler, a conversion table
+and the same drug's measured cell-line distribution. The report and evidence ZIP
+include those visualizations and underlying tables. A comparison calculator makes
+ratios explicit: 16.5 μM / 9 μM = 1.83×, with a target-scale difference of about
+0.263. This is a concentration comparison under matched assay conditions, not a
+patient-progress score. The previous green prediction-error arrow was removed.
+
+IC50 does not supply a safe dose, treatment duration, patient response, death risk
+or treatment cost. The interface and report state the unavailable clinical/price
+inputs instead of inventing thresholds, regimens or prices. The μM conversion
+still depends on the source-unit assumption. No dose–response curve is invented
+from a single IC50 measurement.
+
+To reproduce a candidate and prepare its matching release outputs offline:
+
+```bash
+python scripts/train_mse.py --output .local_training/mse_candidate
+python scripts/prepare_mse_release.py --candidate .local_training/mse_candidate --results .local_training/mse_candidate/mse_candidate_results.json --history .local_training/mse_candidate/mse_training_history.csv --output .local_training/mse_release
+```
+
+Use a new output directory each time. Review the candidate, its external results
+and all regenerated files before a release; these commands do not publish or
+replace the serving bundle. Restart serving processes after deploying a complete
+reviewed bundle. `outputs/mse_training_comparison.json` records the current trial,
+the prior baseline, the screenshot example's fitting-set role and the CCLE trade-off.

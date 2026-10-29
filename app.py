@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from pathdsp.interface import apply_theme, molecular_intro, searchable_pair, present_plot
-from pathdsp.inference import infer_features
+from pathdsp.inference import infer_features, pair_scope
 from pathdsp.validation import read_feature_upload
 from pathdsp.data import build_dataset
 from pathdsp.explain import exact_group_shap, shap_feature_values
@@ -66,8 +66,12 @@ def get_training_dataset():
 
 
 @st.cache_resource(show_spinner=False)
-def get_deploy_model(feature_names: tuple[str, ...]):
+def _get_deploy_model(feature_names: tuple[str, ...], bundle_revision: str):
     return load_model_bundle(ARTIFACT_DIR, list(feature_names))
+
+
+def get_deploy_model(feature_names: tuple[str, ...]):
+    return _get_deploy_model(feature_names, artifact_digest(ARTIFACT_DIR / "manifest.json"))
 
 
 def ic50_from_target(value: float) -> float:
@@ -221,7 +225,7 @@ def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
     }
     (OUTPUT_DIR / "metrics.json").write_text(json.dumps(metrics, indent=2, allow_nan=True), encoding="utf-8")
     status.update(label="Model ready", state="complete")
-    get_deploy_model.clear()
+    _get_deploy_model.clear()
     from pathdsp.inference import model_resource
     model_resource.cache_clear()
     st.session_state.pop("prediction_result", None)
@@ -285,23 +289,22 @@ elif page == "Predict":
         try:
             predictions, x_scaled, shifted = infer_features(raw_x, model, metadata)
             group_values = exact_group_shap(model, x_scaled[0], metadata["feature_groups"])
-            st.session_state["prediction_result"] = {"key": pair_key, "predicted": float(predictions[0]), "groups": group_values, "shifted": shifted}
+            st.session_state["prediction_result"] = {"key": pair_key, "predicted": float(predictions[0]), "groups": group_values, "shifted": shifted, "revision": artifact_digest(ARTIFACT_DIR / "manifest.json")}
         except (ValueError, RuntimeError) as exc:
             st.error(f"Prediction could not complete: {exc}")
             st.session_state.pop("prediction_result", None)
     saved_prediction = st.session_state.get("prediction_result", {})
-    if saved_prediction.get("key") == pair_key:
+    if saved_prediction.get("key") == pair_key and saved_prediction.get("revision") == artifact_digest(ARTIFACT_DIR / "manifest.json"):
         predicted = saved_prediction["predicted"]
         if saved_prediction["shifted"]:
             st.warning("Some inputs are far outside training scaling. This distribution check is a heuristic, not an accuracy guarantee.")
         actual = bundle.observed_response(drug, cell)
         st.subheader(f"{drug} × {cell}")
-        st.caption(f"{source} · saved FNN · five feature groups · research estimate")
+        st.caption(f"{source} · MSE-FNN research estimate · pair scope: {pair_scope(source,drug,cell)}")
         p1, p2, p3 = st.columns(3)
         p1.metric("Predicted −log10(IC50)", f"{predicted:.3f}")
         p2.metric("Predicted IC50 (μM*)", f"{ic50_from_target(predicted):.4g}")
-        p3.metric("Observed −log10(IC50)", "Not available" if actual is None else f"{actual:.3f}",
-                  delta=None if actual is None else f"{predicted - actual:+.3f} predicted − observed")
+        p3.metric("Observed −log10(IC50)", "Not available" if actual is None else f"{actual:.3f}")
         st.caption("*The μM conversion assumes the supplied target was formed from IC50 measured in μM. Always check the source assay metadata before interpreting concentration values.")
         if actual is not None:
             log_error = abs(predicted - actual)
@@ -320,8 +323,12 @@ elif page == "Predict":
             "concentration_fold_error": None if actual is None else float(10 ** min(abs(predicted-actual),20)),
             "model_sha256": artifact_digest(ARTIFACT_DIR / "model.pt"),
             "patient_health_status": "Unavailable — cell-line dataset; no patient records",
+            "model_split": pair_scope(source,drug,cell),
+            "dose_duration_cost_status": "Not determined from cell-line IC50",
         }])
         st.download_button("Download this prediction", result.to_csv(index=False), "pathdsp_prediction.csv", "text/csv")
+        from pathdsp.ic50 import render_ic50_interpretation
+        render_ic50_interpretation(bundle, drug, predicted, actual)
         group_values = saved_prediction["groups"]
         shap_frame = pd.DataFrame({"Feature group": list(group_values), "SHAP value": list(group_values.values())})
         shap_frame["Absolute contribution"] = shap_frame["SHAP value"].abs()
@@ -519,6 +526,7 @@ elif page == "Methods & deploy":
 - **SHAP:** exact Shapley values across the five feature groups are always available. Feature-level Gradient SHAP (expected gradients) is available when `shap` is installed.
 - **Classification-style charts:** ROC/AUC and confusion matrix use the GDSC training median as an exploratory threshold. The research paper uses regression because there is no universal sensitive/resistant cutoff.
 """)
+    st.info("The active research checkpoint was trained with scripts/train_mse.py using Xavier initialization, AdamW and MSE loss. The evaluated checkpoint is served directly, with no final refit on held-out rows. The older train.py workflow remains a separate legacy experiment.")
     st.markdown("### Train or retrain")
     st.caption("Training takes place locally or in the app process. It uses the supplied GDSC matrices and writes `artifacts/model.pt`, `artifacts/metadata.json` and evaluation outputs.")
     col1, col2 = st.columns(2)

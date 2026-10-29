@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import threading
 import numpy as np
+import pandas as pd
 from .data import build_dataset, normalize_id
 from .model import load_model_bundle, standardize_transform, predict_scaled
 from .validation import MAX_BATCH_ROWS, distribution_warning
@@ -20,6 +21,22 @@ def model_resource():
 def dataset_resource(name):
     return build_dataset(name, include_examples=False)
 
+
+
+@lru_cache(maxsize=1)
+def _split_roles(modified_ns, size):
+    frame=pd.read_csv(ROOT/'outputs/model_split_membership.csv')
+    return {(normalize_id(row.drug),normalize_id(row.cell)):row.model_split for row in frame.itertuples()}
+
+
+def pair_scope(dataset,drug,cell):
+    if dataset.upper()!='GDSC':
+        return 'external; not used for fitting'
+    path=ROOT/'outputs/model_split_membership.csv'
+    if not path.is_file():
+        return 'development data; split not recorded'
+    stat=path.stat()
+    return _split_roles(stat.st_mtime_ns,stat.st_size).get((normalize_id(drug),normalize_id(cell)),'unmeasured pair; no fitting label')
 
 def infer_features(raw, model, metadata):
     raw = np.asarray(raw, dtype=np.float32)
@@ -61,7 +78,7 @@ def predict_pairs(dataset: str, pairs: list[tuple[str, str]]) -> dict:
         error = None if actual is None else abs(float(prediction) - actual)
         results.append({'drug': drug, 'cell': cell, 'predicted_neglog10_ic50': float(prediction),
                         'predicted_ic50_uM_assuming_source_unit': float(10 ** -np.clip(prediction, -20, 20)),
-                        'observed_neglog10_ic50': actual, 'absolute_log_error': error,
+                        'observed_neglog10_ic50': actual, 'absolute_log_error': error, 'model_split':pair_scope(dataset,drug,cell),
                         'concentration_fold_error': None if error is None else float(10 ** min(error, 20))})
     warnings = ['Research-use model; predictions are not clinical recommendations.']
     if dataset == 'CCLE':

@@ -2,26 +2,26 @@
   "scope": "Local HTTP benchmark, one warmed API process, OMP_NUM_THREADS=2. Synthetic repeat requests, not a clinical or internet-scale readiness claim.",
   "python": "3.12.14",
   "platform": "Linux",
-  "model_version": "2aab25ffb84ec001",
+  "model_version": "d8c46e8341ea56a7",
   "single_pair": {
     "requests": 30,
-    "p50_ms": 2.504844499981118,
-    "p95_ms": 3.305579299694727,
-    "max_ms": 4.948789000081888
+    "p50_ms": 2.7224249997743755,
+    "p95_ms": 3.686663000826228,
+    "max_ms": 3.845377001198358
   },
   "batch_256_pairs": {
     "requests": 5,
-    "p50_ms": 109.86599200032288,
-    "p95_ms": 112.49513739976464,
-    "max_ms": 112.6188089997413
+    "p50_ms": 109.71671799961769,
+    "p95_ms": 149.04844279990357,
+    "max_ms": 152.84131199950934
   },
   "concurrent_8_clients": {
     "requests": 64,
-    "p50_ms": 17.368742000144266,
-    "p95_ms": 24.167674199884452,
-    "max_ms": 30.872914999690693,
+    "p50_ms": 16.336305000550055,
+    "p95_ms": 22.468069300975912,
+    "max_ms": 32.6024519999919,
     "successful_requests": 64,
-    "requests_per_second": 440.8975917178787
+    "requests_per_second": 443.8059956150908
   },
   "invalid_identifiers_status": 422
 }

@@ -25,3 +25,4 @@ drugs.tsv
 /input/input.txt
 
 .local_backups/
+.local_training/

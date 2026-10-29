@@ -6,7 +6,7 @@ accuracy, and operational production readiness are separate properties.
 
 ## What was checked
 
-- Nineteen integration/unit tests: navigation/search in both datasets, theme switching,
+- Twenty-three integration/unit tests: navigation/search in both datasets, theme switching,
   prediction/observation separation, malformed/missing/infinite upload rejection,
   batch limits, archive-only loading, CSV feature-order consistency, serving-mode
   training protection, artifact corruption, external-transfer warnings, API readiness
@@ -22,14 +22,10 @@ accuracy, and operational production readiness are separate properties.
   unmeasured entries. GDSC excludes 2,633 measured pairs without all features;
   CCLE excludes 465. No labels were invented and no rows were removed to improve
   reported scores. Reproduce with `python scripts/audit_data.py`.
-- `outputs/model_comparison.json`: three exploratory sklearn alternatives on the
-  same seed-42 GDSC pair holdout. The saved FNN MAE **0.321**, RMSE **0.432** beats
-  these candidates (best candidate MAE 0.332, RMSE 0.451). The original weights
-  are retained. Reproduce with `python scripts/compare_models.py` (several minutes).
-  This is model selection on an existing holdout, not fresh final validation.
+- `outputs/model_comparison.json` and `outputs/mse_training_comparison.json`: the historical tree trials did not beat the original FNN. The subsequent Xavier/AdamW/MSE FNN improved GDSC pair-holdout MAE from **0.321 to 0.310**, RMSE from **0.432 to 0.420**. The evaluated checkpoint is served directly. Model selection reused the historical holdout, so this is not fresh final validation. The screenshot example was a fitting row, not an independent test.
 - `outputs/runtime_benchmark.json`: one warmed local HTTP API process with two
-  PyTorch threads. Single-pair p95 about **3.3 ms**; 256-pair batch p95 about
-  **112.5 ms**; 64 successful requests with eight clients, p95 about **24.2 ms**.
+  PyTorch threads. Single-pair p95 about **3.7 ms**; 256-pair batch p95 about
+  **149.0 ms**; 64 successful requests with eight clients, p95 about **22.5 ms**.
   Synthetic repeated pairs and a short run do not establish sustained public
   load capacity, WAN latency, uptime, or a service-level objective.
 - GitHub Actions configuration runs the test suite and data audit on Linux;
@@ -39,12 +35,11 @@ accuracy, and operational production readiness are separate properties.
 
 ## Accuracy limits
 
-The deployment-model audit reports GDSC development-data MAE 0.179; these rows
-were used in development and must not be presented as independent validation.
-External CCLE MAE is **0.866**, RMSE **1.088**, R² **−0.533**. Median concentration
-error is about **5.53×**. The model remains unreliable across those studies.
-A one-unit error in −log10(IC50) means a tenfold concentration error. UI changes,
-input validation and an API do not fix this statistical limitation.
+The active deployment-model audit reports GDSC all-row MAE 0.195 and RMSE 0.275. This mixes fit/validation/holdout rows; use the explicit 0.310 MAE / 0.420 RMSE held-out result for generalization assessment, with the historical holdout-reuse caveat. No final refit contaminated the active checkpoint's held-out rows.
+
+External CCLE MAE is **0.886**, RMSE **1.085**, R² **−0.524**; median concentration error is about **6.22×**. CCLE MAE worsened from the preceding deployment model's 0.866. GDSC all-row MAE also rose from 0.179 to 0.195 because the active checkpoint is fitted to fewer rows and keeps a larger held-out set. These all-row scores are not comparable generalization estimates. The new release improves the common GDSC pair-holdout scores but does not solve cross-study reliability.
+
+The screenshot example improves from 16.51 μM to about 190 μM against 217.8 μM measured, but it was a fitting row. A one-unit log-response error means tenfold concentration error. There are no validated common patient-response, dosing or toxicity cutoffs. Safe duration, risk of death and treatment cost are unavailable from these data. Scale visualizations are descriptive assay context, not a clinical decision rule.
 
 To improve external accuracy credibly: define the intended assay and use case;
 harmonize assay units, dose caps and identifiers using source metadata; evaluate

@@ -3,26 +3,26 @@
     "scope": "saved deployment model; GDSC includes development/training rows, not independent validation",
     "metrics": {
       "n_test": 37732,
-      "mae_neglog10_ic50": 0.1787240109017264,
-      "rmse_neglog10_ic50": 0.23716037289049618,
-      "r2": 0.9611864650908682,
-      "pearson_r": 0.9810262781716995,
-      "spearman_r": 0.9703337424204302
+      "mae_neglog10_ic50": 0.19526330971005668,
+      "rmse_neglog10_ic50": 0.27478831243743346,
+      "r2": 0.9478930728880314,
+      "pearson_r": 0.9737504918548604,
+      "spearman_r": 0.9611679975343703
     },
-    "median_absolute_log_error": 0.1429552435874939,
-    "median_concentration_fold_error": 1.3898093700408936
+    "median_absolute_log_error": 0.14568191766738892,
+    "median_concentration_fold_error": 1.3985626697540283
   },
   "CCLE": {
     "scope": "saved GDSC-trained deployment model evaluated externally on CCLE; no CCLE fitting",
     "metrics": {
       "n_test": 10602,
-      "mae_neglog10_ic50": 0.8664294139989457,
-      "rmse_neglog10_ic50": 1.088252065631115,
-      "r2": -0.5330149921720098,
-      "pearson_r": 0.5050699020669247,
-      "spearman_r": 0.3505449960602729
+      "mae_neglog10_ic50": 0.8861970510354146,
+      "rmse_neglog10_ic50": 1.084878140452869,
+      "r2": -0.5235240659497729,
+      "pearson_r": 0.5835463887782087,
+      "spearman_r": 0.43408464317181195
     },
-    "median_absolute_log_error": 0.7424960136413574,
-    "median_concentration_fold_error": 5.527083396911621
+    "median_absolute_log_error": 0.7936025857925415,
+    "median_concentration_fold_error": 6.217310905456543
   }
 }

@@ -54,6 +54,13 @@ def render_evaluation(get_dataset, get_model):
     d.metric('Research rank',f"{int(selected['research_rank'])} / {len(tables['cell_line_drug_rankings'])}")
     st.caption('*IC50 conversion assumes the source target used μM. Patient health status: unavailable; this dataset contains cell lines, not patients.')
     st.dataframe(readable_selected_pair(tables['selected_pair']),hide_index=True,width='stretch')
+    st.subheader('IC50 scale and applicability')
+    from .ic50 import INTERPRETATION
+    st.markdown(INTERPRETATION)
+    for name in ('ic50_concentration_scale','ic50_same_drug_distribution'):
+        st.image(payload['figures'][name]['png'],caption=payload['figures'][name]['title'],width='stretch')
+    st.dataframe(tables['ic50_same_drug_context'],hide_index=True,width='stretch')
+    st.dataframe(tables['clinical_dose_duration_cost_availability'],hide_index=True,width='stretch')
     st.subheader('Drug comparison for this cell line')
     lower=tables['cell_line_drug_rankings'][tables['cell_line_drug_rankings']['predicted_ic50_uM_assuming_source_unit'] < selected['predicted_ic50_uM_assuming_source_unit']]
     if len(lower):
@@ -75,7 +82,7 @@ def render_evaluation(get_dataset, get_model):
     else:
         st.warning(context['feature_shap_status'])
     st.subheader('Validation evidence · held-out and external results')
-    st.caption('The saved evaluation model and separately fitted deployment model have different scopes. Scores below describe full evaluation sets, not the selected cell-line ranking.')
+    st.caption('The same evaluated MSE-FNN checkpoint is served. Scores describe full evaluation sets, not a guarantee for one selected cell line. Historical holdout reuse prevents an independent final-certification claim.')
     metric_rows=[]
     for scope,metrics in [('GDSC holdout',payload['metrics'].get('holdout',{})),('CCLE external evaluation',payload['metrics'].get('ccle_external',{}))]:
         metric_rows.append({'scope':scope,'MAE':metrics.get('mae_neglog10_ic50'),'RMSE':metrics.get('rmse_neglog10_ic50'),'R²':metrics.get('r2'),'pairs':metrics.get('n_test')})
@@ -97,7 +104,7 @@ def render_evaluation(get_dataset, get_model):
             figure=payload['figures'][name]
             st.image(figure['png'],caption=figure['title'],width='stretch')
     with st.expander('All additional saved diagnostic figures'):
-        shown={'saved_target_distribution','response_distribution','saved_holdout_predictions_agreement','holdout_residuals','holdout_drug_errors','saved_ccle_external_predictions_agreement','candidate_comparison','local_group_shap','local_pathway_shap'}
+        shown={'saved_target_distribution','response_distribution','saved_holdout_predictions_agreement','holdout_residuals','holdout_drug_errors','saved_ccle_external_predictions_agreement','candidate_comparison','local_group_shap','local_pathway_shap','ic50_concentration_scale','ic50_same_drug_distribution'}
         for name,figure in payload['figures'].items():
             if name not in shown:
                 st.image(figure['png'],caption=figure['title'],width='stretch')
