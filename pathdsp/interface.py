@@ -1,7 +1,6 @@
 """Presentation and catalogue search for PathDSP Lab."""
 from pathlib import Path
 import streamlit as st
-import streamlit.components.v1 as components
 
 def apply_theme():
     dark = st.sidebar.toggle("Dark mode", value=False, key="dark_mode")
@@ -35,7 +34,13 @@ def apply_theme():
 
 
 def molecular_intro():
-    components.html((Path(__file__).resolve().parents[1] / 'ui/molecule.html').read_text(encoding='utf-8'), height=365)
+    illustration = Path(__file__).resolve().parents[1] / 'ui/molecule.html'
+    if hasattr(st, 'iframe'):
+        st.iframe(illustration, height=365, alt='Interactive molecular illustration with a pause control')
+    else:
+        # Compatibility with older supported Streamlit releases.
+        import streamlit.components.v1 as components
+        components.html(illustration.read_text(encoding='utf-8'), height=365)
 
 def search_options(values, query):
     query = query.strip().casefold()
