@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 import json
+import hashlib
+import tempfile
 import math
 import os
 
@@ -18,6 +20,7 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 from scipy.stats import pearsonr, spearmanr
+from .validation import validate_metadata
 
 
 class PathDSPFNN(torch.nn.Module):
@@ -254,7 +257,6 @@ def save_model_bundle(model: PathDSPFNN, feature_names: list[str], feature_group
                       medians: np.ndarray, means: np.ndarray, scales: np.ndarray, threshold: float,
                       path: Path, training_metrics: dict | None = None) -> None:
     path.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), path / "model.pt")
     metadata = {
         "architecture": "PathDSP FNN (1000, 800, 500, 100; ELU; dropout=0.1)",
         "target": "negative log10(IC50 in micromolar), as represented by supplied PathDSP response file",
@@ -267,15 +269,35 @@ def save_model_bundle(model: PathDSPFNN, feature_names: list[str], feature_group
         "scaler_scales": scales.astype(float).tolist(),
         "training_metrics": training_metrics or {},
     }
-    (path / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    validate_metadata(metadata)
+    # Stage complete files; readers fail integrity validation during a mixed-version window.
+    # Serving replicas retain their cached model until explicitly restarted.
+    with tempfile.TemporaryDirectory(dir=path) as directory:
+        staged = Path(directory)
+        torch.save(model.state_dict(), staged / "model.pt")
+        (staged / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        manifest = {filename: hashlib.sha256((staged / filename).read_bytes()).hexdigest() for filename in ("model.pt", "metadata.json")}
+        (staged / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        for filename in ("model.pt", "metadata.json", "manifest.json"):
+            os.replace(staged / filename, path / filename)
 
 
 def load_model_bundle(path: Path, expected_features: list[str] | None = None) -> tuple[PathDSPFNN, dict]:
     metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
     if expected_features is not None and metadata["feature_names"] != expected_features:
         raise ValueError("The model's feature order does not match the loaded PathDSP matrices.")
+    validate_metadata(metadata)
+    manifest_path = path / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError("Model integrity manifest is missing. Restore artifacts/manifest.json with its matching model and metadata.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for filename in ("model.pt", "metadata.json"):
+        if hashlib.sha256((path / filename).read_bytes()).hexdigest() != manifest.get(filename):
+            raise ValueError(f"Artifact integrity check failed for {filename}. Restore a matching model bundle.")
     model = PathDSPFNN(len(metadata["feature_names"]))
     state = torch.load(path / "model.pt", map_location="cpu", weights_only=True)
+    if not all(torch.isfinite(value).all() for value in state.values()):
+        raise ValueError("Model weights contain nonfinite values.")
     model.load_state_dict(state)
     model.eval()
     return model, metadata

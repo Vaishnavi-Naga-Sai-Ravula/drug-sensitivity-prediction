@@ -34,5 +34,14 @@ class SearchTests(unittest.TestCase):
             app.text_input[0].set_value('').run()
             app.text_input[1].set_value('').run()
 
+    def test_serving_mode_does_not_allow_retraining(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {}, clear=True):
+            app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=90).run()
+            app.sidebar.radio[0].set_value('Methods & deploy').run()
+            training = next(button for button in app.button if 'Train model' in button.label)
+            self.assertTrue(training.disabled)
+            self.assertFalse(app.exception)
+
 if __name__ == '__main__':
     unittest.main()

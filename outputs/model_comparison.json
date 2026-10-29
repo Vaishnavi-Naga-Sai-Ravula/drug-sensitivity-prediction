@@ -1,0 +1,33 @@
+{
+  "scope": "Exploratory model selection on the existing GDSC seed-42 80/20 pair holdout; not an independent final validation. No CCLE adaptation or deployment weight change.",
+  "seed": 42,
+  "split": "pair",
+  "n_train": 30185,
+  "n_test": 7547,
+  "baseline_fnn": {
+    "mae": 0.3212885882067025,
+    "rmse": 0.4321461925804353,
+    "r2": 0.8728097476474829
+  },
+  "candidates": {
+    "hist_gradient_boosting": {
+      "mae": 0.34920139014462687,
+      "rmse": 0.4714757451370884,
+      "r2": 0.8486051304514084,
+      "seconds": 13.72709675599981
+    },
+    "extra_trees": {
+      "mae": 0.3634797403776156,
+      "rmse": 0.49583438135878133,
+      "r2": 0.8325574912752502,
+      "seconds": 103.50485315100013
+    },
+    "hist_gradient_boosting_tuned": {
+      "mae": 0.33209905338686363,
+      "rmse": 0.4514443635797304,
+      "r2": 0.8611963402112157,
+      "seconds": 44.22269073899997
+    }
+  },
+  "decision": "Retain FNN; no candidate beats its saved MAE and RMSE."
+}

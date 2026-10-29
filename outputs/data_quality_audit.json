@@ -1,0 +1,157 @@
+{
+  "source": "repository bundled processed tables; external ZIP archives are not required",
+  "datasets": {
+    "GDSC": {
+      "tables": {
+        "response": {
+          "rows": 153,
+          "columns": 319,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 8442,
+          "infinite_cells": 0,
+          "min_finite": -4.121998369953203,
+          "max_finite": 3.7386501051330576
+        },
+        "drug_chem": {
+          "rows": 153,
+          "columns": 256,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": 0.0,
+          "max_finite": 1.0
+        },
+        "drug_pathway": {
+          "rows": 311,
+          "columns": 196,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -4.9128971075564705,
+          "max_finite": 7.984569866726131
+        },
+        "cell_exp": {
+          "rows": 326,
+          "columns": 187,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -6.272313699271942,
+          "max_finite": 5.840024542977084
+        },
+        "cell_mut": {
+          "rows": 319,
+          "columns": 196,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -3.4834305636106704,
+          "max_finite": 7.16316386227703
+        },
+        "cell_cnv": {
+          "rows": 319,
+          "columns": 196,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -4.93381287499144,
+          "max_finite": 8.01512495488442
+        }
+      },
+      "usable_response_pairs": 37732,
+      "duplicate_pairs": 0,
+      "usable_drugs": 144,
+      "usable_cells": 319,
+      "features": 1031,
+      "response_pairs_missing_required_features": 2633
+    },
+    "CCLE": {
+      "tables": {
+        "response": {
+          "rows": 24,
+          "columns": 478,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 405,
+          "infinite_cells": 0,
+          "min_finite": -0.9030899869919435,
+          "max_finite": 2.6020599913279625
+        },
+        "drug_chem": {
+          "rows": 24,
+          "columns": 256,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": 0.0,
+          "max_finite": 1.0
+        },
+        "drug_pathway": {
+          "rows": 23,
+          "columns": 196,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -3.964691185470591,
+          "max_finite": 4.336507978446982
+        },
+        "cell_exp": {
+          "rows": 478,
+          "columns": 187,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -5.590666710648124,
+          "max_finite": 6.370467105242788
+        },
+        "cell_mut": {
+          "rows": 478,
+          "columns": 196,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -3.280969893247761,
+          "max_finite": 8.500723012678204
+        },
+        "cell_cnv": {
+          "rows": 478,
+          "columns": 196,
+          "duplicate_normalized_ids": 0,
+          "duplicate_columns": 0,
+          "nonnumeric_nonblank_cells": 0,
+          "missing_cells": 0,
+          "infinite_cells": 0,
+          "min_finite": -5.016950949732581,
+          "max_finite": 8.661324634083922
+        }
+      },
+      "usable_response_pairs": 10602,
+      "duplicate_pairs": 0,
+      "usable_drugs": 23,
+      "usable_cells": 478,
+      "features": 1031,
+      "response_pairs_missing_required_features": 465
+    }
+  }
+}

@@ -15,11 +15,11 @@ PathDSP combines 256 Morgan fingerprint bits with drug-target DG-Net, and cell-l
 
 The response matrices are named `RESP.negLog10IC50`. This implementation treats their target as `-log10(IC50 in μM)` and converts with `IC50_μM = 10 ** (-target)`. The CCLE target floor in the supplied data is approximately `-log10(8 μM)`, consistent with the paper's reported CCLE 8 μM assay cap. Every exported row keeps the original target scale as well as the converted IC50 values.
 
-The model follows the author FNN dimensions (1000, 800, 500, 100), ELU activations and 0.1 dropout. Features are z-scored using training data only. `train.py` evaluates an untouched holdout set, optionally holds out entire drugs or cell lines, separately evaluates on CCLE, and then fits a final model on all GDSC rows for interactive inference.
+The model follows the author FNN dimensions (1000, 800, 500, 100), ELU activations and 0.1 dropout. Features are z-scored using training data only. `train.py` evaluates an untouched holdout set, optionally holds out entire drugs or cell lines, separately evaluates on CCLE, and then fits a deployment model using a separate 90/10 GDSC training/validation split for interactive inference.
 
 ### Current run results
 
-The checked-in outputs are from one 20-epoch, seed-42, random drug-cell-pair 80/20 split: GDSC holdout MAE 0.328 and RMSE 0.440 on the `-log10(IC50 in μM)` scale (R² 0.868). The separate CCLE evaluation has MAE 0.857 and RMSE 1.079 (R² -0.506), showing that transfer to CCLE is substantially less reliable. These are this implementation's run results, not the paper's scores; they are not a repeated 10-fold cross-validation result. Run `python train.py --split cell` and `python train.py --split drug` for harder generalization checks before making broad performance claims.
+The checked-in outputs are from one seed-42 run (30 maximum epochs, 28 used), with a random drug-cell-pair 80/20 split: GDSC holdout MAE 0.321 and RMSE 0.432 on the `-log10(IC50 in μM)` scale (R² 0.873). The separate CCLE evaluation has MAE 0.850 and RMSE 1.068 (R² -0.478) for the evaluation model, showing that transfer to CCLE is substantially less reliable. These are this implementation's run results, not the paper's scores; they are not a repeated 10-fold cross-validation result. Run `python train.py --split cell` and `python train.py --split drug` for harder generalization checks before making broad performance claims.
 
 ROC/AUC and confusion-matrix charts are shown as **exploratory visualizations** only. Their response label uses the GDSC training median, not a clinical sensitivity threshold. The paper uses regression because no universal sensitive/resistant cutoff is established.
 
@@ -29,17 +29,16 @@ ROC/AUC and confusion-matrix charts are shown as **exploratory visualizations** 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python train.py --split pair --epochs 30
 streamlit run app.py
 ```
 
-The app can also train from **Methods & deploy**. For stricter generalization checks, run `python train.py --split cell` or `python train.py --split drug`; these evaluate on cell lines or drugs not seen during training and are more challenging than a random pair split.
+The saved model is included; retraining is unnecessary to run the app. Offline training is available with `python train.py --split pair --epochs 30`. In-app training from **Methods & deploy** is disabled unless `PATHDSP_ENABLE_TRAINING=1` is explicitly set for local research. For stricter generalization checks, run `python train.py --split cell` or `python train.py --split drug`; these evaluate on cell lines or drugs not seen during training and are more challenging than a random pair split.
 
 ## Outputs
 
 Training writes:
 
-- `artifacts/model.pt` and `artifacts/metadata.json` — the final model, ordered feature list and training-only imputation/scaling values.
+- `artifacts/model.pt`, `artifacts/metadata.json`, and `artifacts/manifest.json` — the deployment model, ordered feature list and training-only imputation/scaling values.
 - `outputs/holdout_predictions.csv` — observed and predicted `-log10(IC50)` and converted IC50 for each held-out drug-cell pair.
 - `outputs/ccle_external_predictions.csv` — GDSC-trained model evaluated on available CCLE pairs.
 - `outputs/metrics.json`, `outputs/training_history.csv`, `outputs/global_group_shap.csv`, `outputs/global_feature_shap.csv` and `outputs/sampled_feature_shap_values.csv`.
@@ -52,7 +51,7 @@ To regenerate the sampled feature-level SHAP output for the saved final model wi
 
 ## Deploy to Streamlit Community Cloud
 
-1. Create a GitHub repository for this project. Include `app.py`, `pathdsp/`, `train.py`, `explain_outputs.py`, `requirements.txt`, `.streamlit/`, `Dockerfile`, `app_data/pathdsp_core.zip`, `PROJECT_PLAN.md`, `SHAP_INTERPRETATION_GUIDE.md`, and the trained `artifacts/` folder.
+1. Create a GitHub repository for this project. Include `app.py`, `pathdsp/`, `ui/`, `train.py`, `explain_outputs.py`, `requirements.txt`, `.streamlit/`, `Dockerfile`, `app_data/pathdsp_core.zip`, `PROJECT_PLAN.md`, `SHAP_INTERPRETATION_GUIDE.md`, and the trained `artifacts/` folder.
 2. Do not upload the full `processed_data/`, raw omics files, the 297 MB PPI pickle, or the original multi-hundred-megabyte input archives. `.gitignore` excludes these local-only files.
 3. In Streamlit Community Cloud, choose the repository and set the app file to `app.py`.
 4. Open the deployed page and check one known GDSC drug-cell pair, one CCLE pair, the holdout metrics, and a batch CSV before sharing the URL.
@@ -117,3 +116,21 @@ that described fitting on all GDSC rows.
 Use the sidebar **Dark mode** switch to choose a light or dark workspace. The
 choice remains active while navigating the current session. Reproduce the saved
 model audit with `python scripts/audit_model.py`; it updates only the audit JSON.
+
+## Immersive research workspace and validation
+
+The landing experience now fills a large responsive scene with interactive
+molecule, cell-landscape and pathway-network views. Every section has its own
+animated banner. Light and dark palettes, mobile navigation, pause controls and
+OS/sidebar reduced-motion options are supported. The art is illustrative.
+
+Prediction uploads now have explicit size, numeric-value and missingness checks.
+Artifacts have consistency hashes; inference concurrency and batch sizes are
+bounded. In-app training is disabled by default to protect the serving model.
+The optional `api.py` service provides research inference and functional health
+checks. No uploaded raw ZIP archives are used.
+
+See [release evidence, accuracy limits and deployment instructions](docs/READINESS.md).
+The current CCLE transfer performance remains poor. **This is not a clinically
+validated or universally production-ready model.** Three alternative-model trials
+failed to improve the existing GDSC holdout score, so the weights were retained.

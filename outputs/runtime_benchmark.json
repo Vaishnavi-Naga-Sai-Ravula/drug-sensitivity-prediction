@@ -1,0 +1,27 @@
+{
+  "scope": "Local HTTP benchmark, one warmed API process, OMP_NUM_THREADS=2. Synthetic repeat requests, not a clinical or internet-scale readiness claim.",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "model_version": "2aab25ffb84ec001",
+  "single_pair": {
+    "requests": 30,
+    "p50_ms": 2.504844499981118,
+    "p95_ms": 3.305579299694727,
+    "max_ms": 4.948789000081888
+  },
+  "batch_256_pairs": {
+    "requests": 5,
+    "p50_ms": 109.86599200032288,
+    "p95_ms": 112.49513739976464,
+    "max_ms": 112.6188089997413
+  },
+  "concurrent_8_clients": {
+    "requests": 64,
+    "p50_ms": 17.368742000144266,
+    "p95_ms": 24.167674199884452,
+    "max_ms": 30.872914999690693,
+    "successful_requests": 64,
+    "requests_per_second": 440.8975917178787
+  },
+  "invalid_identifiers_status": 422
+}

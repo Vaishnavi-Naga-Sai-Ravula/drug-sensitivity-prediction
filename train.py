@@ -155,7 +155,7 @@ def run(*, split_mode: str = "pair", max_epochs: int = 30, test_size: float = 0.
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as stream:
         json.dump(metrics, stream, indent=2, allow_nan=True)
 
-    # Fit a final deployable model on all supplied GDSC examples after measuring
+    # Fit a deployable model with a separate GDSC training/validation split after measuring
     # generalization on the untouched holdout split above.
     final = fit_final_model(bundle.X, bundle.y, max_epochs=max_epochs, seed=seed + 1, progress=progress)
     save_model_bundle(

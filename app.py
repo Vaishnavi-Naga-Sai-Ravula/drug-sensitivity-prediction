@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -9,7 +10,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from pathdsp.interface import apply_theme, molecular_intro, searchable_pair
+from pathdsp.interface import apply_theme, molecular_intro, searchable_pair, present_plot
+from pathdsp.inference import infer_features
+from pathdsp.validation import read_feature_upload
 from pathdsp.data import build_dataset
 from pathdsp.explain import exact_group_shap, shap_feature_values
 from pathdsp.model import (
@@ -34,7 +37,7 @@ ROOT = Path(__file__).resolve().parent
 ARTIFACT_DIR = ROOT / "artifacts"
 OUTPUT_DIR = ROOT / "outputs"
 
-st.set_page_config(page_title="PathDSP Lab", page_icon="🧬", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="PathDSP Lab", page_icon="🧬", layout="wide", initial_sidebar_state="auto")
 st.markdown("""
 <style>
 .block-container {padding-top: 1.7rem; padding-bottom: 2rem; max-width: 1320px;}
@@ -171,7 +174,7 @@ def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
     result = fit_and_evaluate(
         bundle.X, bundle.y, bundle.meta, split_mode=split_mode, max_epochs=max_epochs,
     )
-    status.update(label="Fitting the deployable model on the full GDSC set…", state="running")
+    status.update(label="Fitting the deployable model with a GDSC training/validation split…", state="running")
     final = fit_final_model(bundle.X, bundle.y, max_epochs=max_epochs, seed=43)
     save_model_bundle(final["model"], bundle.feature_names, bundle.feature_groups,
                       final["medians"], final["means"], final["scales"], float(np.median(bundle.y)),
@@ -218,6 +221,9 @@ def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
     (OUTPUT_DIR / "metrics.json").write_text(json.dumps(metrics, indent=2, allow_nan=True), encoding="utf-8")
     status.update(label="Model ready", state="complete")
     get_deploy_model.clear()
+    from pathdsp.inference import model_resource
+    model_resource.cache_clear()
+    st.session_state.pop("prediction_result", None)
     return metrics
 
 
@@ -229,8 +235,9 @@ st.sidebar.markdown("**Research use only**")
 st.sidebar.caption("Cell-line model for research and education. Not a clinical test or treatment recommendation.")
 
 
+molecular_intro(page)
+
 if page == "Overview":
-    molecular_intro()
     def open_prediction():
         st.session_state["navigation"] = "Predict"
     st.button("Enter the prediction lab →", type="primary", on_click=open_prediction)
@@ -281,15 +288,24 @@ elif page == "Predict":
         drug = c1.selectbox("Drug", drugs, key=f"drug_{source}", help="Search above or type inside this dropdown.")
         cell = c2.selectbox("Cancer cell line", cells, key=f"cell_{source}", help="Search above or type inside this dropdown.")
         submitted = st.form_submit_button("Predict response", type="primary", disabled=not drugs or not cells)
+    pair_key = (source, drug, cell)
     if submitted:
         raw_x = bundle.pair_features(drug, cell).reshape(1, -1)
-        x_scaled = standardize_transform(
-            raw_x, np.asarray(metadata["imputation_medians"], dtype=np.float32),
-            np.asarray(metadata["scaler_means"], dtype=np.float32),
-            np.asarray(metadata["scaler_scales"], dtype=np.float32),
-        )
-        predicted = float(predict_scaled(model, x_scaled)[0])
+        try:
+            predictions, x_scaled, shifted = infer_features(raw_x, model, metadata)
+            group_values = exact_group_shap(model, x_scaled[0], metadata["feature_groups"])
+            st.session_state["prediction_result"] = {"key": pair_key, "predicted": float(predictions[0]), "groups": group_values, "shifted": shifted}
+        except (ValueError, RuntimeError) as exc:
+            st.error(f"Prediction could not complete: {exc}")
+            st.session_state.pop("prediction_result", None)
+    saved_prediction = st.session_state.get("prediction_result", {})
+    if saved_prediction.get("key") == pair_key:
+        predicted = saved_prediction["predicted"]
+        if saved_prediction["shifted"]:
+            st.warning("Some inputs are far outside training scaling. This distribution check is a heuristic, not an accuracy guarantee.")
         actual = bundle.observed_response(drug, cell)
+        st.subheader(f"{drug} × {cell}")
+        st.caption(f"{source} · saved FNN · five feature groups · research estimate")
         p1, p2, p3 = st.columns(3)
         p1.metric("Predicted −log10(IC50)", f"{predicted:.3f}")
         p2.metric("Predicted IC50 (μM*)", f"{ic50_from_target(predicted):.4g}")
@@ -305,13 +321,13 @@ elif page == "Predict":
             st.write(f"Observed IC50 (μM, converted): **{ic50_from_target(actual):.4g}**")
             if source == "GDSC":
                 st.caption("This pair is part of the GDSC reference table used to develop the deployable model. Treat this row as a development-data illustration; use the held-out table and metrics for performance claims.")
-            result = pd.DataFrame([{
-                "dataset": source, "drug": drug, "cell": cell,
-                "actual_neglog10_ic50": actual, "predicted_neglog10_ic50": predicted,
-                "actual_ic50_uM": ic50_from_target(actual), "predicted_ic50_uM": ic50_from_target(predicted),
-            }])
-            st.download_button("Download this prediction", result.to_csv(index=False), "pathdsp_prediction.csv", "text/csv")
-        group_values = exact_group_shap(model, x_scaled[0], metadata["feature_groups"])
+        result = pd.DataFrame([{
+            "dataset": source, "drug": drug, "cell": cell,
+            "actual_neglog10_ic50": actual, "predicted_neglog10_ic50": predicted,
+            "actual_ic50_uM": None if actual is None else ic50_from_target(actual), "predicted_ic50_uM": ic50_from_target(predicted),
+        }])
+        st.download_button("Download this prediction", result.to_csv(index=False), "pathdsp_prediction.csv", "text/csv")
+        group_values = saved_prediction["groups"]
         shap_frame = pd.DataFrame({"Feature group": list(group_values), "SHAP value": list(group_values.values())})
         shap_frame["Absolute contribution"] = shap_frame["SHAP value"].abs()
         shap_frame = shap_frame.sort_values("Absolute contribution", ascending=True)
@@ -322,34 +338,30 @@ elif page == "Predict":
         ax.set_xlabel("Contribution to predicted −log10(IC50)")
         ax.set_title("Exact SHAP values by PathDSP feature group")
         fig.tight_layout()
-        st.pyplot(fig, clear_figure=True)
+        present_plot(fig)
         plt.close(fig)
         st.caption("Positive SHAP contribution raises predicted −log10(IC50), corresponding to lower IC50 under the source transform. These are model associations, not causal effects.")
 
     st.markdown("---")
     st.subheader("Batch predictions from a PathDSP-ready CSV/TSV")
-    st.caption("The file must contain all model feature columns with the same definitions and units. Missing values are imputed with training medians.")
+    st.caption("The file must contain all model feature columns with the same definitions and units. Blank values (up to 20% per row) use training medians. Nonnumeric or infinite features are rejected. Limit: 2,048 rows / 20 MB.")
     st.download_button("Download feature-column template", pd.DataFrame(columns=metadata["feature_names"]).to_csv(index=False),
                        "pathdsp_feature_template.csv", "text/csv")
     uploaded = st.file_uploader("Upload feature rows", type=["csv", "tsv", "txt"], key="batch_upload")
     if uploaded is not None:
-        sep = "\t" if uploaded.name.lower().endswith((".tsv", ".txt")) else ","
-        input_frame = pd.read_csv(uploaded, sep=sep)
-        missing = sorted(set(metadata["feature_names"]) - set(input_frame.columns))
-        if missing:
-            st.error(f"The upload is missing {len(missing)} required feature columns. Example: {', '.join(missing[:6])}")
-        else:
-            raw = input_frame[metadata["feature_names"]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float32)
-            medians = np.asarray(metadata["imputation_medians"], dtype=np.float32)
-            means = np.asarray(metadata["scaler_means"], dtype=np.float32)
-            scales = np.asarray(metadata["scaler_scales"], dtype=np.float32)
-            scaled = standardize_transform(raw, medians, means, scales)
-            batch_pred = predict_scaled(model, scaled)
+        try:
+            sep = "\t" if uploaded.name.lower().endswith((".tsv", ".txt")) else ","
+            input_frame, raw = read_feature_upload(uploaded.getvalue(), sep, metadata["feature_names"])
+            batch_pred, _, shifted = infer_features(raw, model, metadata)
+            if shifted:
+                st.warning("Some uploaded rows contain features far outside training scaling. Interpret predictions cautiously.")
             out = input_frame.copy()
             out["predicted_neglog10_ic50"] = batch_pred
             out["predicted_ic50_uM_assuming_source_unit"] = np.power(10.0, -np.clip(batch_pred, -20, 20))
             st.dataframe(out.head(100), width="stretch")
             st.download_button("Download all predictions", out.to_csv(index=False), "pathdsp_batch_predictions.csv", "text/csv")
+        except (ValueError, RuntimeError) as exc:
+            st.error(str(exc))
 
 elif page == "Evaluation":
     st.title("Model evaluation")
@@ -366,17 +378,39 @@ elif page == "Evaluation":
     if binary:
         st.dataframe(pd.DataFrame([{"Exploratory median-split metric": key, "Value": value}
                                    for key, value in binary.items()]), width="stretch", hide_index=True)
-    left, right = st.columns(2)
-    with left:
-        show_image("actual_vs_predicted.png", "Held-out observed versus predicted response")
-        show_image("roc_curve.png", "Exploratory ROC curve using the training median as a threshold")
-        show_image("correlation_heatmap.png", "Correlation matrix for the most variable test-set features and target")
-    with right:
-        show_image("residual_diagnostics.png", "Held-out residual diagnostics")
-        show_image("confusion_matrix.png", "Exploratory confusion matrix using the training median")
-        show_image("target_distribution.png", "Distribution of measured GDSC responses")
-        show_image("training_curve.png", "Training and validation RMSE over epochs")
-        show_image("global_group_shap.png", "Global mean absolute SHAP contribution by feature group")
+    predictions_path = OUTPUT_DIR / "holdout_predictions.csv"
+    if predictions_path.is_file():
+        import altair as alt
+        holdout_frame = pd.read_csv(predictions_path)
+        st.subheader("Explore held-out predictions")
+        selected_drug = st.selectbox("Inspect a held-out drug", ["All drugs"] + sorted(holdout_frame["drug"].unique(), key=str.casefold))
+        visible = holdout_frame if selected_drug == "All drugs" else holdout_frame[holdout_frame["drug"] == selected_drug]
+        st.caption(f"{len(visible):,} held-out pairs in this view. Showing up to 5,000 points; overall scores above use the complete holdout. Hover for identifiers; drag or scroll to explore.")
+        plot_frame = visible.sample(n=min(5000, len(visible)), random_state=42)
+        low = float(min(visible["actual_neglog10_ic50"].min(), visible["predicted_neglog10_ic50"].min()))
+        high = float(max(visible["actual_neglog10_ic50"].max(), visible["predicted_neglog10_ic50"].max()))
+        points = alt.Chart(plot_frame).mark_circle(size=32, opacity=.65).encode(
+            x=alt.X("actual_neglog10_ic50:Q", title="Observed −log10(IC50)"),
+            y=alt.Y("predicted_neglog10_ic50:Q", title="Predicted −log10(IC50)"),
+            color=alt.Color("absolute_error:Q", scale=alt.Scale(scheme="tealblues"), title="Absolute log error"),
+            tooltip=["drug:N", "cell:N", alt.Tooltip("actual_neglog10_ic50:Q", format=".3f"), alt.Tooltip("predicted_neglog10_ic50:Q", format=".3f"), alt.Tooltip("absolute_error:Q", format=".3f")])
+        diagonal = alt.Chart(pd.DataFrame({"observed":[low,high], "predicted":[low,high]})).mark_line(color="#e99c80", strokeDash=[5,5]).encode(x="observed:Q", y="predicted:Q")
+        foreground = "#deedf5" if st.session_state.get("dark_mode") else "#173b4c"
+        chart = (points + diagonal).properties(height=420).interactive().configure(background="transparent").configure_axis(labelColor=foreground, titleColor=foreground, gridColor="#52778933").configure_legend(labelColor=foreground, titleColor=foreground).configure_view(strokeOpacity=0)
+        st.altair_chart(chart, width="stretch")
+        st.caption("Dashed line: exact agreement. This is the held-out evaluation model, not a plot of deployment-model training fit.")
+    with st.expander("Saved diagnostic figure gallery"):
+        left, right = st.columns(2)
+        with left:
+            show_image("actual_vs_predicted.png", "Held-out observed versus predicted response")
+            show_image("roc_curve.png", "Exploratory ROC curve using the training median as a threshold")
+            show_image("correlation_heatmap.png", "Correlation matrix for the most variable test-set features and target")
+        with right:
+            show_image("residual_diagnostics.png", "Held-out residual diagnostics")
+            show_image("confusion_matrix.png", "Exploratory confusion matrix using the training median")
+            show_image("target_distribution.png", "Distribution of measured GDSC responses")
+            show_image("training_curve.png", "Training and validation RMSE over epochs")
+            show_image("global_group_shap.png", "Global mean absolute SHAP contribution by feature group")
     if "ccle_external" in metrics_file:
         st.subheader("Independent CCLE evaluation")
         external = metrics_file["ccle_external"]
@@ -392,13 +426,20 @@ elif page == "Evaluation":
     predictions_path = OUTPUT_DIR / "holdout_predictions.csv"
     if predictions_path.is_file():
         st.download_button("Download GDSC holdout actual/predicted table", predictions_path.read_bytes(), "holdout_predictions.csv", "text/csv")
-    st.json(metrics_file)
+    with st.expander("Reproducibility metadata"):
+        st.json(metrics_file)
+    st.subheader("Data integrity and deployment-model audit")
+    for filename in ("data_quality_audit.json", "deployment_model_audit.json", "model_comparison.json"):
+        audit_path = OUTPUT_DIR / filename
+        if audit_path.is_file():
+            with st.expander(filename.replace("_", " ").removesuffix(".json").title()):
+                st.json(json.loads(audit_path.read_text(encoding="utf-8")))
 
 elif page == "Explainability":
     st.title("Model explanations")
     guide_path = ROOT / "SHAP_INTERPRETATION_GUIDE.md"
     if guide_path.is_file():
-        with st.expander("SHAP theory: what the values mean and how to read them", expanded=True):
+        with st.expander("SHAP theory: what the values mean and how to read them", expanded=False):
             st.markdown(guide_path.read_text(encoding="utf-8"))
     else:
         st.info("SHAP values are model attributions relative to a baseline. Positive values raise predicted −log10(IC50), corresponding to lower predicted IC50; they are not causal effects.")
@@ -475,7 +516,7 @@ elif page == "Explainability":
         ax.set_title("Feature-level SHAP values (top 25 by absolute contribution)")
         ax.set_xlabel("Contribution to predicted −log10(IC50)")
         fig.tight_layout()
-        st.pyplot(fig, clear_figure=True)
+        present_plot(fig)
         plt.close(fig)
         st.download_button("Download local feature SHAP values (.csv)", feature_frame.to_csv(index=False),
                            "feature_shap_values.csv", "text/csv", key="download_local_feature_shap")
@@ -532,7 +573,7 @@ elif page == "Explainability":
         ax.set_xlabel("Mean absolute group SHAP value")
         ax.set_title("Global contribution by feature group")
         fig.tight_layout()
-        st.pyplot(fig, clear_figure=True)
+        present_plot(fig)
         plt.close(fig)
         st.download_button("Download global group SHAP summary", global_path.read_bytes(),
                            "global_group_shap.csv", "text/csv")
@@ -556,7 +597,10 @@ elif page == "Methods & deploy":
     epochs = col1.slider("Maximum epochs", 5, 100, 30, 5)
     split_mode = col2.selectbox("Holdout strategy", ["pair", "cell", "drug"], index=0,
                                 help="Pair split matches the paper's random pair evaluation. Cell/drug holdouts probe harder generalization settings.")
-    if st.button("Train model and generate evaluation outputs", type="primary"):
+    training_enabled = os.environ.get("PATHDSP_ENABLE_TRAINING") == "1"
+    if not training_enabled:
+        st.info("Serving mode: in-app retraining is disabled to protect the active model and shared resources. Run train.py offline, validate a candidate, and deploy its complete artifact bundle. For a local research session only, set PATHDSP_ENABLE_TRAINING=1 before starting.")
+    if st.button("Train model and generate evaluation outputs", type="primary", disabled=not training_enabled):
         with st.status("Starting model run…", expanded=True) as status:
             try:
                 gdsc = get_training_dataset()

@@ -82,9 +82,7 @@ def normalize_id(value: object) -> str:
 
 
 def _open_table(relative_path: str) -> BinaryIO:
-    local_path = ROOT / "processed_data" / relative_path
-    if local_path.is_file():
-        return local_path.open("rb")
+    # A single versioned source prevents stale local tables changing predictions.
     if CORE_ARCHIVE.is_file():
         with zipfile.ZipFile(CORE_ARCHIVE) as archive:
             member = "processed_data/" + relative_path
@@ -93,7 +91,7 @@ def _open_table(relative_path: str) -> BinaryIO:
             except KeyError as exc:
                 raise FileNotFoundError(f"{relative_path} is missing from {CORE_ARCHIVE}") from exc
     raise FileNotFoundError(
-        "PathDSP data were not found. Expand processed_data.zip or place app_data/pathdsp_core.zip beside app.py."
+        "Bundled PathDSP data were not found. Restore app_data/pathdsp_core.zip from the repository."
     )
 
 
@@ -102,9 +100,12 @@ def read_matrix(relative_path: str) -> pd.DataFrame:
         frame = pd.read_csv(stream, sep="\t", index_col=0, low_memory=False)
     frame.index = frame.index.astype(str).str.strip()
     frame.columns = frame.columns.astype(str).str.strip()
-    frame = frame.loc[~frame.index.duplicated(keep="first")]
-    frame = frame.apply(pd.to_numeric, errors="coerce")
-    return frame
+    if pd.Index(frame.index.str.casefold()).duplicated().any() or frame.columns.duplicated().any():
+        raise ValueError(f"Duplicate identifiers or feature columns in {relative_path}.")
+    numeric = frame.apply(pd.to_numeric, errors="coerce")
+    if (frame.notna() & numeric.isna()).any().any() or np.isinf(numeric.to_numpy(dtype=float)).any():
+        raise ValueError(f"Nonnumeric or infinite values in {relative_path}.")
+    return numeric
 
 
 def _combine_features(tables: dict[str, pd.DataFrame], domain: str) -> tuple[np.ndarray, list[str], dict[str, list[int]], list[str]]:
