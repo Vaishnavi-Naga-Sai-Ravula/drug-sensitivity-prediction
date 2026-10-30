@@ -52,8 +52,8 @@ claims, and raw archives are not needed for the current bundled workflow.
 
 ## Serving and scaling
 
-The dashboard disables retraining unless `PATHDSP_ENABLE_TRAINING=1` is explicitly
-set for a local research session. Keep production replicas read-only. Train in a
+The dashboard cannot retrain or overwrite the serving model, including when legacy training
+environment flags are set. Keep deployed replicas read-only. Train in a
 separate process, validate a candidate, and release the model, metadata and
 `manifest.json` together; restart replicas to load a new version. The manifest
 checks consistency against accidental corruption; it is not a digital signature
@@ -161,3 +161,35 @@ GDSC/CCLE evaluation row, and every UI table is registered in the shared export
 payload and its completeness inventory. Shared Overview/Methods text prevents
 app/report drift. The report includes the complete interpretation guide and
 captured generated reports; missing patient/clinical data are never invented.
+
+## New research validation stage
+
+Prediction evidence now travels with the dashboard, report and API output: model/data identity,
+training membership, conditional source units, applicability and explicit unavailable uncertainty.
+The serving model is unchanged. `research/provenance_audit.json` records missing original
+assay provenance, name-only identifier overlap and constant/repeated feature checks.
+No valid rows were deleted to improve scores and no concentration transformation was guessed.
+
+The research benchmark uses frozen, distinct fitting/tuning/calibration/testing roles for pair,
+unseen-drug, unseen-cell and both-unseen evaluation. Simple baselines and an ensemble are compared;
+fresh FNN evaluation uses those same roles. Candidate split-conformal intervals and within-cell
+ranking metrics are exported. These are exploratory research results on previously available data,
+not independent final certification and not intervals for the serving checkpoint.
+See [the protocol and outstanding release gates](VALIDATION_PLAN.md).
+
+API bearer-key checking, per-process rate limits, liveness, request IDs and timing headers now have
+regression coverage. Ingress TLS, per-user access, Streamlit authentication, distributed limits,
+monitoring infrastructure and sustained-load acceptance remain deployment responsibilities.
+
+The new stage passes **38** local regression tests, including stored-research checksum verification,
+unseen-entity separation, finite-sample quantile behaviour, matched-cell comparison persistence,
+authentication and rate limiting. Final Chromium checks passed both themes, mobile, three-chart
+Evaluation and fully offline interactive reports with complete CSV exports. `pip check` passes.
+The new local API benchmark (`research/runtime_benchmark-20261030.json`) measured single-pair
+p95 **4.8 ms**, 256-pair batch p95 **151 ms**, and eight-client burst p95 **37.3 ms**. It is a short,
+warmed, synthetic local measurement, not a sustained-load or public-service SLO.
+
+Fresh FNN research test R² is **0.864** for pairs, **0.061** for unseen drugs, **0.756** for unseen
+cells and **0.020** for both unseen. These are different partitions from the serving checkpoint.
+The results demonstrate a generalization gap, not production certification. All candidate results,
+including weak and negative baseline scores, are retained. No serving weights or historical outputs changed.

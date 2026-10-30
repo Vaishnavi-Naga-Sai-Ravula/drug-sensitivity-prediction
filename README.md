@@ -34,7 +34,7 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The saved model is included; retraining is unnecessary to run the app. Reproduce the active candidate with `python scripts/train_mse.py --output .local_training/mse_candidate`; this creates a candidate bundle without replacing the serving model. In-app training from **Methods & deploy** is disabled unless `PATHDSP_ENABLE_TRAINING=1` is explicitly set for local research. For stricter generalization checks, run `python train.py --split cell` or `python train.py --split drug`; these evaluate on cell lines or drugs not seen during training and are more challenging than a random pair split.
+The saved model is included; retraining is unnecessary to run the app. Reproduce the active candidate with `python scripts/train_mse.py --output .local_training/mse_candidate`; this creates a candidate bundle without replacing the serving model. In-app training cannot overwrite the serving checkpoint. Use `scripts/validate_research.py` and `scripts/validate_fnn.py` for separate unseen-drug/cell candidate experiments; review the validation plan before any promotion.
 
 ## Outputs
 
@@ -250,3 +250,20 @@ and the complete SHAP interpretation guide. Deployment instructions are excluded
 A table coverage inventory and clickable contents make missing exports detectable
 and the complete report navigable. No model retraining or accuracy claims are made
 by this display/export update.
+
+### Research evidence and operational controls
+
+Prediction evidence cards now identify the exact model/data, fit-versus-test membership,
+conditional concentration units, unsupported clinical fields and uncertainty limitations.
+Evaluation retains its three-chart layout; the full report includes the evidence cards,
+research benchmark tables and additional interactive benchmark plots.
+
+See [the validation and release plan](docs/VALIDATION_PLAN.md) for unseen-drug/cell experiments,
+calibration assumptions, missing assay provenance, independent-data requirements and operational gates.
+Research candidate intervals are **not** intervals for the deployed FNN.
+
+The optional API accepts `Authorization: Bearer ...` when `PATHDSP_API_KEY` is configured.
+Set that variable through your hosting secret manager; never commit it. `PATHDSP_REQUESTS_PER_MINUTE`
+controls bounded per-process limits. `/health/live` is separate from `/health/ready`.
+These controls do not authenticate Streamlit or replace TLS, per-user access control or shared ingress limits.
+GitHub Actions runs the regression suite on pushes and pull requests.

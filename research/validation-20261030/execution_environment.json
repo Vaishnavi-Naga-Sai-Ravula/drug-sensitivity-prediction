@@ -1,0 +1,20 @@
+{
+  "python": "3.12.14",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "packages": {
+    "numpy": "2.5.4",
+    "pandas": "3.1.0",
+    "scikit-learn": "1.9.1",
+    "torch": "2.15.0+cpu",
+    "scipy": "1.18.1"
+  },
+  "source_sha256": {
+    "scripts/validate_research.py": "a70c6daed378cda4c7237b3531dec29a25b292cb9c14800d72a17ee3a365b2d3",
+    "scripts/validate_fnn.py": "3beac9059c7da8a00aaa4fb71b7e5c7b7eb1fd54a96a229f9501d0c5c91d8c13",
+    "pathdsp/research.py": "1d69b7f8524cca3c4b313d529661746c2f8c3df71d80b30a587eec1a8c43917a",
+    "pathdsp/model.py": "a4f5550b694107f96b944b30151818ffc5494bee35169b4f30b86e4cbb282421",
+    "pathdsp/data.py": "c4745d0dd94beab2803aef4f1c273e880569f121ae463117d7de54aa42ed738d"
+  },
+  "serving_model_sha256": "d8c46e8341ea56a78f23f05191c78491d489592d3a91bda42642045fa2287cf3",
+  "purpose": "Reproducibility record, not certification; original assay units remain unverified"
+}

@@ -45,13 +45,17 @@ def render_evaluation(get_dataset,get_model):
     payload['context']['interactive_holdout_filter']=view
     payload['context']['evaluation_visible_charts']=['interactive_holdout_view','gdsc_agreement_density','ccle_agreement_density']
     selected,rankings,explanations,validation,scale=st.tabs(['Selected pair','Drug comparisons','SHAP & pathways','Validation data','IC50 scale'])
-    with selected:st.dataframe(tables['evaluation_selected_pair'],hide_index=True,width='stretch')
+    with selected:
+        st.dataframe(tables['evaluation_selected_pair'],hide_index=True,width='stretch')
+        st.dataframe(tables['prediction_evidence'],hide_index=True,width='stretch')
     with rankings:st.dataframe(tables['evaluation_drug_comparisons'],hide_index=True,width='stretch')
     with explanations:
         st.dataframe(tables['local_group_shap'],hide_index=True,width='stretch')
         st.dataframe(tables['local_pathway_shap'],hide_index=True,width='stretch')
         st.dataframe(tables['local_feature_shap'],hide_index=True,width='stretch')
     with validation:
+        for name in sorted(name for name in tables if name.startswith('research_')):
+            st.dataframe(tables[name], hide_index=True, width='stretch')
         st.dataframe(tables['evaluation_metric_summary'],hide_index=True,width='stretch')
         saved=st.selectbox('Validation table',sorted(name for name in tables if name.startswith('saved_')))
         st.dataframe(tables[saved],hide_index=True,width='stretch')

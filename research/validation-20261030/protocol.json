@@ -1,0 +1,125 @@
+{
+  "protocol_version": 1,
+  "seed": 20261030,
+  "dataset_sha256": "dfea70001677cb757cf6dac0797b31e3b5c46d1480d08f80ce8408c7031b5ad6",
+  "archive_sha256": "4446efe2966a92089684f9b423d1c2cde7c99f3a2fe04d860682af0ac40b2129",
+  "scope": "Exploratory research: repository data were previously used for model development. New splits are not an independent final certification.",
+  "target": "supplied negLog10IC50; concentration unit not independently verified",
+  "selection": "minimum tuning RMSE; test labels never select models; ensemble is fixed equal-weight Ridge/ExtraTrees/HGB",
+  "calibration": "90% marginal split-conformal candidate intervals; exchangeability required, not individual or external guarantees",
+  "serving_model_changed": false,
+  "models": {
+    "mean": {
+      "constant": null,
+      "quantile": null,
+      "strategy": "mean"
+    },
+    "ridge": {
+      "alpha": 100,
+      "copy_X": true,
+      "fit_intercept": true,
+      "max_iter": null,
+      "positive": false,
+      "random_state": null,
+      "solver": "auto",
+      "tol": 0.0001
+    },
+    "extra_trees": {
+      "bootstrap": false,
+      "ccp_alpha": 0.0,
+      "criterion": "squared_error",
+      "max_depth": null,
+      "max_features": 0.6,
+      "max_leaf_nodes": null,
+      "max_samples": null,
+      "min_impurity_decrease": 0.0,
+      "min_samples_leaf": 3,
+      "min_samples_split": 2,
+      "min_weight_fraction_leaf": 0.0,
+      "monotonic_cst": null,
+      "n_estimators": 64,
+      "n_jobs": 2,
+      "oob_score": false,
+      "random_state": 20261030,
+      "verbose": 0,
+      "warm_start": false
+    },
+    "hist_gradient_boosting": {
+      "categorical_features": "from_dtype",
+      "early_stopping": "auto",
+      "interaction_cst": null,
+      "l2_regularization": 5,
+      "learning_rate": 0.1,
+      "loss": "squared_error",
+      "max_bins": 255,
+      "max_depth": null,
+      "max_features": 1.0,
+      "max_iter": 100,
+      "max_leaf_nodes": 15,
+      "min_samples_leaf": 20,
+      "monotonic_cst": null,
+      "n_iter_no_change": 10,
+      "quantile": null,
+      "random_state": 20261030,
+      "scoring": "loss",
+      "tol": 1e-07,
+      "validation_fraction": 0.1,
+      "verbose": 0,
+      "warm_start": false
+    }
+  },
+  "splits": {
+    "pair": {
+      "fit": 22639,
+      "tune": 3773,
+      "calibration": 3773,
+      "test": 7547
+    },
+    "drug": {
+      "fit": 22803,
+      "tune": 3607,
+      "calibration": 3812,
+      "test": 7510
+    },
+    "cell": {
+      "fit": 22600,
+      "tune": 3847,
+      "calibration": 3750,
+      "test": 7535
+    },
+    "both": {
+      "fit": 13658,
+      "tune": 372,
+      "calibration": 360,
+      "test": 1499
+    }
+  },
+  "files": {
+    "benchmark_summary.csv": "7d29ca2e1c7549cd593a0ce345f99605f1e56807a31b81d025bfd78f32f499e8",
+    "both_ensemble_predictions.csv": "9ff5193350cb6cd1579760aadf36355918862b340db3415e067bbdb7f716a9cc",
+    "both_extra_trees_predictions.csv": "2abc5ef9834310b3ecccc488c917bb02ab438070f566c35345e8bb6ca44b3a40",
+    "both_hist_gradient_boosting_predictions.csv": "ba6fe0369a0c57ecb1075a834f8d2cef6cee7bacfbe87fff57a10e9feb39db84",
+    "both_mean_predictions.csv": "140ecd8474b499fd7e07783cd649f11473f5efd2f76d122fd8cc251f035c3dab",
+    "both_membership.csv": "20aed83f732d4c792fdca903c780b1ad803e105fc3eda90fd2a48165366445fa",
+    "both_ridge_predictions.csv": "1f6aeec12111e013859153f0bc4f057346f7beb47251e6a39d7bedaf8e555b53",
+    "cell_ensemble_predictions.csv": "618af448707bb8b2d1b0b4042c6decbabbb0f871acc64635af78df740b1bbc40",
+    "cell_extra_trees_predictions.csv": "14fcfb194378805d507808d7d4745ecac5028b618483b6e3dc0e1ebfb21c09da",
+    "cell_hist_gradient_boosting_predictions.csv": "e7c3fe4753de8c7227da60da9c5e4c6d44cf0fd78a181b37e59234e89f1ae76f",
+    "cell_mean_predictions.csv": "1e689a2a6a3dd3101fc7b5e56bf238ec48a00c15012bc55502f41e265d75eaeb",
+    "cell_membership.csv": "df2d1b16bd75a2cc251e6c77791e1f1f47c134ba4a58d9baddedbbb3d444627b",
+    "cell_ridge_predictions.csv": "e6d0580817048196a76686add841f89239f22cdc81b2c18b1a49d1f2141ade2b",
+    "drug_ensemble_predictions.csv": "dffe6aaab0e239207f447abb0530b96c8607abd4b658e833898744a1c28335a5",
+    "drug_extra_trees_predictions.csv": "4b163e42faeba715b946a898bffad60592433612b111465429e49129b8e26bec",
+    "drug_hist_gradient_boosting_predictions.csv": "1fb1b8821ba7c2dfea31c55f4f5a88eddab6421871c31e9af8253410fcf19a7f",
+    "drug_mean_predictions.csv": "56eefa79014a8fb92e73144dc5cd4d3ccaee7a67da12c27e68c7b407f51c114e",
+    "drug_membership.csv": "97b35a540aa0d06f67391287954ec296a45dcce340acdb2e4b865a3f9814dd98",
+    "drug_ridge_predictions.csv": "fdcede3b28e4fd2c8062cc503c36f6dacc9fe8f0fc1893a4b0ed18391ca1c184",
+    "pair_ensemble_predictions.csv": "88df38553bf63ac4a687f8531813b29f052eefd0d0eebe51e4ceda2c1035c2d0",
+    "pair_extra_trees_predictions.csv": "69ce906941fd9919d5618c564a3dc29af37048be4cea3cc91f6fd822583ea6ab",
+    "pair_hist_gradient_boosting_predictions.csv": "3aab0d115148a74ae039481cdccb17ef1f5f78fb267379f4c163b18514bde676",
+    "pair_mean_predictions.csv": "1f09fefe02b18d57c5e0c23e2c507179e52f4db65c3c750faa7a86cde87e93b5",
+    "pair_membership.csv": "003da9f10b5c37b23b11fdeb8876251789a27cc5b89cadd9075beeeff5841bae",
+    "pair_ridge_predictions.csv": "abc61ca9d043fe07b9f55bd3a2ad962da2efa0c38c9cbafbea2868228162650d",
+    "within_cell_rankings.csv": "1ce6243fbc961b65d2e8359ae7ed2ba5e4a65900c1afbd85934bda1150a4fe29"
+  }
+}

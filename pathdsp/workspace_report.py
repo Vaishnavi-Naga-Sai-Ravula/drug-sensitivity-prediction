@@ -36,7 +36,7 @@ def attach_workspace_outputs(payload, snapshots, calculator=None):
     payload['workspace_results']=records
     payload['tables']['workspace_section_coverage']=pd.DataFrame([
         {'Section':'Overview','Included':'Research workflow, local illustrative animation and interpretation limits'},
-        {'Section':'Predict','Included':'All recorded session predictions and generated batches' if 'predict' in sections or 'batch' in sections else 'No prediction/batch was generated in this session; selected-pair evaluation is included separately'},
+        {'Section':'Predict','Included':'All recorded session predictions and generated batches' if 'predict' in sections or 'batch' in sections or 'comparison' in sections else 'No prediction/batch was generated in this session; selected-pair evaluation is included separately'},
         {'Section':'Evaluation','Included':'Selected pair, full rankings, local explanations, all saved validation tables and figures, cursor-enabled charts'},
         {'Section':'Explainability','Included':'All recorded session SHAP results, plus selected-pair and saved global SHAP evidence' if 'explainability' in sections else 'Selected-pair and global SHAP evidence included; no separate Explainability-page result generated in this session'},
         {'Section':'Methods','Included':'Architecture, active training recipe, preprocessing, RWR, validation design and model metadata; deployment/run instructions excluded'},
@@ -89,6 +89,9 @@ def section_content(payload):
     guide=ROOT/'SHAP_INTERPRETATION_GUIDE.md'
     if guide.is_file():
         parts.append('<h2>Explainability · complete interpretation guide</h2>'+markdown_science(guide.read_text(encoding='utf-8')))
+    research_readme=ROOT/'research/validation-20261030/README.md'
+    if research_readme.is_file():
+        parts.append('<h2>Research validation findings</h2>'+markdown_science(research_readme.read_text()))
     parts.append('<h2>Complete Methods scientific content</h2>'+markdown_science(METHODS_SCIENCE))
     parts+=['<h2>Methods · scientific design</h2>',
         '<p>The model combines Morgan fingerprint chemistry, DG-Net drug-target pathway enrichment, and EXP/ssGSEA, MUT-Net and CNV-Net cell features. The FNN has hidden dimensions 1000, 800, 500 and 100, ELU activations and 0.1 dropout. Training-only feature imputation and standardization are saved with the model. The active recipe uses Xavier initialization, AdamW, MSE loss and early stopping on validation data. The evaluated checkpoint is served directly.</p>',

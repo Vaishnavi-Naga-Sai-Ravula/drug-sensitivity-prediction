@@ -82,11 +82,17 @@ def build_evaluation(bundle, model, metadata, drug, cell):
     pathways = features[features['feature_group'] != 'CHEM'].copy()
     tables = {'selected_pair':selected, 'cell_line_drug_rankings':ranks, 'local_group_shap':group_frame,
               'local_feature_shap':features, 'local_pathway_shap':pathways}
+    from .evidence import evidence_table, research_tables
+    tables['prediction_evidence'] = evidence_table(bundle.name, drug, cell, shifted)
+    tables.update(research_tables())
     for path in sorted(OUTPUTS.glob('*.csv')):
         tables['saved_' + path.stem] = pd.read_csv(path)
     from .interactive import add_chart_source_tables
     metrics = json.loads((OUTPUTS/'metrics.json').read_text(encoding='utf-8'))
     audits = {path.stem:json.loads(path.read_text(encoding='utf-8')) for path in sorted(OUTPUTS.glob('*.json')) if path.name != 'metrics.json'}
+    for research_file in sorted((ROOT/'research').rglob('*.json')):
+        if research_file.is_file():
+            audits['research_'+research_file.stem] = json.loads(research_file.read_text())
     context = {'dataset':bundle.name,'drug':drug,'cell':cell,
                'generated_at_utc':datetime.now(timezone.utc).isoformat(),
                'model_sha256':hashlib.sha256((ROOT/'artifacts/model.pt').read_bytes()).hexdigest(),
@@ -217,7 +223,7 @@ def add_evaluation_tables(payload):
         {'Item':'Source units','Value':'μM is inherited from the source-unit assumption. A response distribution is not a dose–response curve.'},
     ])
     names=['evaluation_selected_pair','evaluation_drug_comparisons','local_group_shap','local_pathway_shap','local_feature_shap','evaluation_metric_summary','ic50_scale_reference','ic50_same_drug_context','clinical_dose_duration_cost_availability','evaluation_interpretation_notes']
-    names+=sorted(name for name in tables if name.startswith('saved_'))
+    names+=sorted(name for name in tables if name.startswith(('saved_','research_')) or name=='prediction_evidence')
     tables['evaluation_table_inventory']=pd.DataFrame([{'Table':name,'Rows':len(tables[name]),'Columns':len(tables[name].columns),'Export':'Complete embedded CSV and ZIP CSV'} for name in names])
 
 def render_report(payload):
@@ -236,6 +242,7 @@ def render_report(payload):
     else:
         message='No drug in this catalogue has a lower predicted IC50 for this cell line. This ranking does not establish treatment efficacy.'
     parts += ['<h2>IC50 scale, patient applicability, duration and cost</h2>', '<p>'+escape(INTERPRETATION)+'</p>', '<p>A one-unit log-response difference is a tenfold concentration difference. No patient benefit or toxicity threshold can be inferred from a value such as 9 or 16.5 μM alone. Clinical duration and cost cannot be calculated from these cell-line data.</p>', tables['clinical_dose_duration_cost_availability'].to_html(index=False,escape=True),tables['ic50_scale_reference'].to_html(index=False,escape=True),tables['ic50_same_drug_context'].to_html(index=False,escape=True,na_rep='Unavailable')]
+    parts += ['<h2>Prediction evidence and applicability</h2>', tables['prediction_evidence'].to_html(index=False,escape=True)]
     parts += ['<h2>2. Comparative drug ranking</h2>',f'<p>{escape(message)}</p>','<p>All eligible drugs are included below. Ranking does not account for toxicity, dose feasibility, uncertainty or patient biology.</p>','<div class="scroll">'+readable_rankings(tables['cell_line_drug_rankings']).to_html(index=False,na_rep='Unavailable',escape=True,float_format=lambda value:f'{value:.5g}')+'</div>']
     parts += ['<h2>3. Pathway and SHAP interpretation</h2>','<p>No one-to-one drug–pathway assignment is supplied. The following are model attributions for the selected drug–cell pair. Positive SHAP raises −log10(IC50), corresponding to lower estimated IC50; negative SHAP moves it in the opposite direction. Feature SHAP is approximate; group SHAP is exact over five groups.</p>',f'<p>{escape(context["feature_shap_status"])}</p>',tables['local_group_shap'].to_html(index=False,escape=True),'<h3>Largest pathway contributions</h3>',tables['local_pathway_shap'].head(25).to_html(index=False,escape=True),f'<p>Exact group additivity residual: {context["group_shap_additivity_residual"]:.3g}.</p>']
     parts += ['<h2>4. All evaluation visualizations</h2>','<p>The active release serves the same checkpoint used for the displayed GDSC holdout and CCLE evaluation. Fit/validation/holdout membership is recorded; the holdout has been reused for model selection and is not an independent final certification. The response distribution is not a concentration–response dose curve.</p>']
@@ -246,6 +253,10 @@ def render_report(payload):
         encoded=base64.b64encode(figure['png']).decode('ascii')
         parts.append(f'<figure><h3>{escape(figure["title"])}</h3><img alt="{escape(figure["title"])}" src="data:image/png;base64,{encoded}"></figure>')
     parts.append('</div>')
+    if 'research_benchmark_summary' in tables:
+        parts += ['<h2>Research benchmark · generalization and uncertainty</h2>', '<p>Fresh candidate models use separate fitting, tuning, calibration and testing roles. These data were previously available during development: results are exploratory, not independent certification. The serving FNN and its predictions are unchanged. Candidate intervals are not intervals for the serving model. Coverage can fail under unseen-entity or assay shift.</p>', tables['research_benchmark_summary'].to_html(index=False,escape=True,float_format=lambda value:f'{value:.4g}')]
+        if 'research_fnn_summary' in tables:
+            parts.append(tables['research_fnn_summary'].to_html(index=False,escape=True,float_format=lambda value:f'{value:.4g}'))
     parts += ['<h2>5. Metrics, audit evidence and reproducibility</h2>', '<p>Overall scores refer to the complete saved evaluation sets. Rankings are for the chosen cell line. These scopes must not be combined into a single accuracy claim.</p>', '<pre>'+escape(json.dumps(payload['metrics'],indent=2))+'</pre>']
     for name,audit in payload['audits'].items():
         parts.append(f'<details><summary>{escape(name)}</summary><pre>{escape(json.dumps(audit,indent=2))}</pre></details>')
@@ -284,5 +295,8 @@ def evidence_zip(payload, report=None):
             archive.writestr('tables/'+name+'.csv',table.to_csv(index=False))
         for name,figure in payload['figures'].items():
             archive.writestr('figures/'+name+'.png',figure['png'])
+        for path in sorted((ROOT/'research').rglob('*')):
+            if path.is_file() and path.suffix in ('.csv','.json','.md'):
+                archive.write(path,'research/'+str(path.relative_to(ROOT/'research')))
         archive.writestr('README.txt','Open evaluation_report.html in a browser. It is self-contained, interactive offline, and printable (printed/PDF charts are static). Tables contain all rows; the dashboard may show shorter previews. No patient health records are supplied. Rankings and SHAP are exploratory cell-line model outputs, not treatment recommendations.\n')
     return stream.getvalue()

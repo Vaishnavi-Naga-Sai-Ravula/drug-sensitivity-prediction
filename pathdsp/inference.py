@@ -85,4 +85,7 @@ def predict_pairs(dataset: str, pairs: list[tuple[str, str]]) -> dict:
         warnings.append('Poor cross-study transfer: the deployment model has external CCLE R² < 0.')
     if shifted:
         warnings.append('Some features are far outside training scaling; this is a heuristic distribution warning.')
+    from .evidence import prediction_evidence
+    for result in results:
+        result['evidence'] = prediction_evidence(dataset, result['drug'], result['cell'], shifted)
     return {'dataset': dataset, 'model_version': version, 'results': results, 'warnings': warnings}

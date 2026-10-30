@@ -10,6 +10,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--url', default='http://127.0.0.1:8505')
+parser.add_argument('--output',type=Path,default=Path(__file__).resolve().parents[1]/'outputs/runtime_benchmark.json')
 args = parser.parse_args()
 with httpx.Client(base_url=args.url, timeout=30, trust_env=False) as client:
     ready = client.get('/health/ready'); ready.raise_for_status()
@@ -41,6 +42,9 @@ with httpx.Client(base_url=args.url, timeout=30, trust_env=False) as client:
               'single_pair':summary(single), 'batch_256_pairs':summary(batch),
               'concurrent_8_clients':dict(summary(concurrent), successful_requests=64, requests_per_second=64/duration),
               'invalid_identifiers_status':invalid.status_code}
-    path=Path(__file__).resolve().parents[1]/'outputs/runtime_benchmark.json'
+    path=args.output
+    if path.exists() and path.resolve() != (Path(__file__).resolve().parents[1]/'outputs/runtime_benchmark.json').resolve():
+        raise ValueError('Refusing to overwrite a recorded benchmark')
+    path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(report,indent=2))

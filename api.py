@@ -14,6 +14,20 @@ async def lifespan(app):
 
 app = FastAPI(title='PathDSP Research Inference', version='1.0.0', lifespan=lifespan)
 
+from pathdsp.operations import ApiControls
+controls = ApiControls()
+app.middleware('http')(controls.middleware)
+
+@app.get('/health/live')
+def live():
+    return {'status':'alive'}
+
+@app.get('/v1/model-card')
+def model_card():
+    from pathdsp.evidence import prediction_evidence
+    bundle = dataset_resource('GDSC')
+    return prediction_evidence('GDSC', bundle.drug_ids[0], bundle.cell_ids[0])
+
 class Pair(BaseModel):
     model_config = ConfigDict(extra="forbid")
     drug: str = Field(min_length=1, max_length=128)

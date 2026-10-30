@@ -36,7 +36,7 @@ class SearchTests(unittest.TestCase):
 
     def test_serving_mode_does_not_allow_retraining(self):
         from unittest.mock import patch
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict('os.environ', {'PATHDSP_ENABLE_TRAINING':'1'}, clear=True):
             app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=90).run()
             app.radio[0].set_value('Methods & deploy').run()
             training = next(button for button in app.button if 'Train model' in button.label)
@@ -45,3 +45,19 @@ class SearchTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class ComparisonTests(unittest.TestCase):
+    def test_comparison_persists_and_captures_complete_session_results(self):
+        app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=90).run()
+        app.radio[0].set_value('Predict').run()
+        choices=app.multiselect[0].options[:2]
+        app.multiselect[0].set_value(choices).run()
+        next(button for button in app.button if button.label=='Run matched-cell comparison').click().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.session_state['matched_comparison']['response']['results']),2)
+        app.run()
+        self.assertFalse(app.exception)
+        snapshots=app.session_state['workspace_outputs']
+        comparisons=[value for value in snapshots.values() if value['section']=='comparison']
+        self.assertEqual(len(comparisons),1)
+        self.assertEqual(len(comparisons[0]['tables']['drug_comparison']),2)

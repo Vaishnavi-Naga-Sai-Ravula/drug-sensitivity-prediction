@@ -191,6 +191,9 @@ def build_charts(payload, dark=False):
             if source is not None:
                 same=source[source['drug']==row['drug']]
                 charts[key+'_distribution']=_histogram(-same['actual_neglog10_ic50'],'Predict snapshot · same-drug assay distribution','log10(IC50 in μM*)',25)
+        if key.startswith('workspace_') and key.endswith('_drug_comparison'):
+            from .comparison_ui import comparison_chart
+            charts[key]=comparison_chart(frame)
         if key.endswith('_batch_predictions') and 'predicted_neglog10_ic50' in frame:
             fig=go.Figure(go.Scatter(x=np.arange(1,len(frame)+1),y=frame['predicted_neglog10_ic50'],mode='markers',hovertemplate='Input row: %{x}<br>Predicted −log10(IC50): %{y:.6f}<extra></extra>'))
             fig.update_layout(title='Predict · generated batch results',xaxis_title='Input row (1-based)',yaxis_title='Predicted −log10(IC50)');charts[key]=fig
@@ -198,6 +201,16 @@ def build_charts(payload, dark=False):
             category='feature' if 'feature' in frame else 'feature_group'
             top=frame.assign(magnitude=frame.shap_value.abs()).nlargest(25,'magnitude')
             charts[key]=_bars(top,category,'shap_value',key.replace('_',' ').title(),'Contribution to −log10(IC50)')
+    research_frames=[tables[name] for name in ('research_benchmark_summary','research_fnn_summary') if name in tables]
+    if research_frames:
+        summary=pd.concat(research_frames,ignore_index=True)
+        for metric,title in [('rmse','Research benchmark · error by unseen-entity split'),('coverage_90','Candidate intervals · measured test coverage, nominal 90%')]:
+            fig=go.Figure()
+            for name,frame in summary.groupby('model'):
+                fig.add_trace(go.Bar(x=frame['split'],y=frame[metric],name=name,hovertemplate='Split: %{x}<br>Value: %{y:.5f}<extra>'+name+'</extra>'))
+            fig.update_layout(title=title,barmode='group',xaxis_title='Research split · not independent certification',yaxis_title='RMSE (log target)' if metric=='rmse' else 'Fraction covered')
+            if metric=='coverage_90':fig.add_hline(y=.9,line_dash='dash')
+            charts['research_'+metric]=fig
     for fig in charts.values():
         fig.update_layout(template='plotly_dark' if dark else 'plotly_white',hovermode='closest',height=fig.layout.height or 460,autosize=True,margin_t=65,margin_b=75,font_family='system-ui',paper_bgcolor='#102b3b' if dark else '#ffffff',uirevision='preserve')
         fig.update_xaxes(showspikes=True,spikemode='across',spikesnap='cursor');fig.update_yaxes(showspikes=True,spikemode='across',spikesnap='cursor')

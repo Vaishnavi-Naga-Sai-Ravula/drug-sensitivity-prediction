@@ -1,6 +1,7 @@
 * text=auto
 *.json text eol=lf
 *.py text eol=lf
+*.csv text eol=lf
 *.pt binary
 *.zip binary
 *.png binary

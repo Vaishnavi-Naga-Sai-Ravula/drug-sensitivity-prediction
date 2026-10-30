@@ -1,0 +1,43 @@
+{
+  "archive_sha256": "4446efe2966a92089684f9b423d1c2cde7c99f3a2fe04d860682af0ac40b2129",
+  "target": "supplied \u2212log10(IC50)",
+  "unit_verified": false,
+  "assay_protocol_verified": false,
+  "replicate_identity_available": false,
+  "unit_evidence": "Processed response filenames name the transformation; original concentration unit and assay protocols are not bundled. No guessed unit correction applied.",
+  "pathway_mapping": "Numeric features, not verified drug indications or causal pathway effects",
+  "overlap": {
+    "drug": {
+      "gdsc": 144,
+      "ccle": 23,
+      "shared_normalized_ids": 6,
+      "limitation": "Name matches only; cross-study biological identity not independently verified"
+    },
+    "cell": {
+      "gdsc": 319,
+      "ccle": 478,
+      "shared_normalized_ids": 0,
+      "limitation": "Name matches only; cross-study biological identity not independently verified"
+    }
+  },
+  "GDSC": {
+    "duplicate_feature_rows": 0,
+    "constant_feature_columns": 0,
+    "target_min": -4.073627471923828,
+    "target_max": 3.73865008354187,
+    "at_minimum_count": 1,
+    "at_maximum_count": 1,
+    "boundary_interpretation": "Repeated boundary values may reflect assay limits; original protocols are needed before censoring adjustments",
+    "action": "Retain valid rows; investigate identical features and assay provenance before external claims"
+  },
+  "CCLE": {
+    "duplicate_feature_rows": 0,
+    "constant_feature_columns": 4,
+    "target_min": -0.9030900001525879,
+    "target_max": 2.602060079574585,
+    "at_minimum_count": 5703,
+    "at_maximum_count": 44,
+    "boundary_interpretation": "Repeated boundary values may reflect assay limits; original protocols are needed before censoring adjustments",
+    "action": "Retain valid rows; investigate identical features and assay provenance before external claims"
+  }
+}

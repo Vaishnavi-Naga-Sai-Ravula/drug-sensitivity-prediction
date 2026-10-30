@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -20,21 +18,10 @@ from pathdsp.data import build_dataset
 from pathdsp.explain import exact_group_shap, shap_feature_values
 from pathdsp.model import (
     artifact_digest,
-    fit_and_evaluate,
-    fit_final_model,
     load_model_bundle,
     predict_scaled,
-    save_model_bundle,
     standardize_transform,
 )
-from pathdsp.visualizations import (
-    PALETTE,
-    save_evaluation_figures,
-    save_group_shap_figure,
-    save_target_distribution,
-    save_training_history_figure,
-)
-from train import save_feature_shap_outputs
 
 
 ROOT = Path(__file__).resolve().parent
@@ -177,64 +164,6 @@ def get_saved_metrics() -> dict | None:
     return None
 
 
-def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
-    status.update(label="Training and evaluating the holdout model…", state="running")
-    result = fit_and_evaluate(
-        bundle.X, bundle.y, bundle.meta, split_mode=split_mode, max_epochs=max_epochs,
-    )
-    status.update(label="Fitting the deployable model with a GDSC training/validation split…", state="running")
-    final = fit_final_model(bundle.X, bundle.y, max_epochs=max_epochs, seed=43)
-    save_model_bundle(final["model"], bundle.feature_names, bundle.feature_groups,
-                      final["medians"], final["means"], final["scales"], float(np.median(bundle.y)),
-                      ARTIFACT_DIR, training_metrics=result["metrics"])
-    predictions = result["predictions"]
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    predictions.to_csv(OUTPUT_DIR / "holdout_predictions.csv", index=False)
-    pd.DataFrame(result["history"]).to_csv(OUTPUT_DIR / "training_history.csv", index=False)
-    save_target_distribution(OUTPUT_DIR / "figures", bundle.y)
-    save_evaluation_figures(
-        OUTPUT_DIR / "figures", predictions, result["metrics"],
-        X_test=bundle.X[result["test_idx"]], feature_names=bundle.feature_names,
-    )
-    rng = np.random.default_rng(42)
-    chosen = rng.choice(len(result["test_idx"]), size=min(64, len(result["test_idx"])), replace=False)
-    group_rows = [exact_group_shap(
-        result["model"], result["X_scaled"][result["test_idx"][i]], bundle.feature_groups
-    ) for i in chosen]
-    group_frame = pd.DataFrame(group_rows)
-    group_summary = pd.DataFrame({
-        "feature_group": group_frame.columns,
-        "mean_absolute_group_shap": [float(group_frame[col].abs().mean()) for col in group_frame.columns],
-        "mean_signed_group_shap": [float(group_frame[col].mean()) for col in group_frame.columns],
-    }).sort_values("mean_absolute_group_shap", ascending=False)
-    group_frame.to_csv(OUTPUT_DIR / "holdout_group_shap_values.csv", index=False)
-    group_summary.to_csv(OUTPUT_DIR / "global_group_shap.csv", index=False)
-    save_training_history_figure(OUTPUT_DIR / "figures", pd.DataFrame(result["history"]))
-    save_group_shap_figure(OUTPUT_DIR / "figures", group_summary)
-    feature_shap_examples = 0
-    if importlib.util.find_spec("shap"):
-        rng = np.random.default_rng(49)
-        background_idx = rng.choice(result["train_idx"], size=min(16, len(result["train_idx"])), replace=False)
-        feature_idx = rng.choice(result["test_idx"], size=min(12, len(result["test_idx"])), replace=False)
-        summary = save_feature_shap_outputs(
-            result["model"], result["X_scaled"][background_idx], result["X_scaled"][feature_idx],
-            bundle.meta.iloc[feature_idx].reset_index(drop=True), bundle.feature_names, OUTPUT_DIR, nsamples=32,
-        )
-        feature_shap_examples = len(feature_idx)
-    metrics = {
-        "dataset": "GDSC", "examples": int(len(bundle.y)), "feature_count": len(bundle.feature_names),
-        "split_mode": split_mode, "holdout": result["metrics"],
-        "feature_shap_examples": feature_shap_examples,
-    }
-    (OUTPUT_DIR / "metrics.json").write_text(json.dumps(metrics, indent=2, allow_nan=True), encoding="utf-8")
-    status.update(label="Model ready", state="complete")
-    _get_deploy_model.clear()
-    from pathdsp.inference import model_resource
-    model_resource.cache_clear()
-    st.session_state.pop("prediction_result", None)
-    return metrics
-
-
 page = st.radio("Workspace section", ["Overview", "Predict", "Evaluation", "Explainability", "Methods & deploy"], horizontal=True, key="navigation", label_visibility="collapsed")
 
 
@@ -297,6 +226,10 @@ elif page == "Predict":
         p1.metric("Predicted −log10(IC50)", f"{predicted:.3f}")
         p2.metric("Predicted IC50 (μM*)", f"{ic50_from_target(predicted):.4g}")
         p3.metric("Observed −log10(IC50)", "Not available" if actual is None else f"{actual:.3f}")
+        from pathdsp.evidence import evidence_table
+        evidence = evidence_table(source, drug, cell, saved_prediction["shifted"])
+        with st.expander("Prediction evidence · provenance, applicability and uncertainty"):
+            st.dataframe(evidence, hide_index=True, width="stretch")
         st.caption("*The μM conversion assumes the supplied target was formed from IC50 measured in μM. Always check the source assay metadata before interpreting concentration values.")
         if actual is not None:
             log_error = abs(predicted - actual)
@@ -319,7 +252,7 @@ elif page == "Predict":
             "dose_duration_cost_status": "Not determined from cell-line IC50",
         }])
         from pathdsp.workspace_report import record_output
-        record_output(st.session_state,"predict",{"prediction":result,"group_shap":pd.DataFrame({"feature_group":list(saved_prediction["groups"]),"shap_value":list(saved_prediction["groups"].values())})},{"dataset":source,"drug":drug,"cell":cell,"model_sha256":result.iloc[0]["model_sha256"]})
+        record_output(st.session_state,"predict",{"prediction_evidence":evidence,"prediction":result,"group_shap":pd.DataFrame({"feature_group":list(saved_prediction["groups"]),"shap_value":list(saved_prediction["groups"].values())})},{"dataset":source,"drug":drug,"cell":cell,"model_sha256":result.iloc[0]["model_sha256"]})
         st.download_button("Download this prediction", result.to_csv(index=False), "pathdsp_prediction.csv", "text/csv")
         from pathdsp.ic50 import render_ic50_interpretation
         scale_tables = render_ic50_interpretation(bundle, drug, predicted, actual)
@@ -332,6 +265,8 @@ elif page == "Predict":
         st.caption("Positive SHAP contribution raises predicted −log10(IC50), corresponding to lower IC50 under the source transform. These are model associations, not causal effects.")
 
     st.markdown("---")
+    from pathdsp.comparison_ui import render_comparison
+    render_comparison(bundle, drug, cell)
     st.subheader("Batch predictions from a PathDSP-ready CSV/TSV")
     st.caption("The file must contain all model feature columns with the same definitions and units. Blank values (up to 20% per row) use training medians. Nonnumeric or infinite features are rejected. Limit: 2,048 rows / 20 MB.")
     from pathdsp.evaluation import sample_features
@@ -500,25 +435,16 @@ elif page == "Methods & deploy":
     st.markdown(METHODS_SCIENCE)
     st.info("The active research checkpoint was trained with scripts/train_mse.py using Xavier initialization, AdamW and MSE loss. The evaluated checkpoint is served directly, with no final refit on held-out rows. The older train.py workflow remains a separate legacy experiment.")
     st.markdown("### Train or retrain")
-    st.caption("Training takes place locally or in the app process. It uses the supplied GDSC matrices and writes `artifacts/model.pt`, `artifacts/metadata.json` and evaluation outputs.")
+    st.caption("Candidate training runs offline in a separate research directory. The serving application cannot overwrite the active checkpoint or its evaluation evidence.")
     col1, col2 = st.columns(2)
     epochs = col1.slider("Maximum epochs", 5, 100, 30, 5, key="research_epochs")
     split_mode = col2.selectbox("Holdout strategy", ["pair", "cell", "drug"], index=0,
                                 help="Pair split matches the paper's random pair evaluation. Cell/drug holdouts probe harder generalization settings.",key="research_split")
-    training_enabled = os.environ.get("PATHDSP_ENABLE_TRAINING") == "1"
+    training_enabled = False
     record_output(st.session_state,"methods",{"training_configuration":pd.DataFrame([{"max_epochs":epochs,"split_mode":split_mode,"training_enabled":training_enabled}])},{"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")})
-    if not training_enabled:
-        st.info("Serving mode: in-app retraining is disabled to protect the active model and shared resources. Run train.py offline, validate a candidate, and deploy its complete artifact bundle. For a local research session only, set PATHDSP_ENABLE_TRAINING=1 before starting.")
-    if st.button("Train model and generate evaluation outputs", type="primary", disabled=not training_enabled):
-        with st.status("Starting model run…", expanded=True) as status:
-            try:
-                gdsc = get_training_dataset()
-                result = train_from_app(gdsc, epochs, split_mode, status)
-                st.success(f"Training finished on {result['examples']:,} pairs and {result['feature_count']:,} features.")
-                st.json(result)
-            except Exception as exc:
-                status.update(label="Training failed", state="error")
-                st.exception(exc)
+    st.info("Serving mode: training is isolated from the application. Run the research validation scripts in a new output directory; review independent validation before promoting any candidate.")
+    st.button("Train model and generate evaluation outputs", type="primary", disabled=True)
+    st.code("python scripts/validate_research.py --output research/new-run\npython scripts/validate_fnn.py --directory research/new-run", language="bash")
     st.markdown("### Run locally")
     st.code("python -m venv .venv\n.venv\\Scripts\\Activate.ps1  # Windows\npip install -r requirements.txt\nstreamlit run app.py", language="powershell")
     st.markdown("### Deploy")

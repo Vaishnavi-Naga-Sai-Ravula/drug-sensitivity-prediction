@@ -1,0 +1,23 @@
+{
+  "seed": 20261030,
+  "max_epochs": 40,
+  "patience": 8,
+  "optimizer": "AdamW lr=.0004 weight_decay=.0001",
+  "initialization": "Xavier",
+  "objective": "MSE",
+  "fit_preprocessing_only": true,
+  "selection": "early stopping on tuning RMSE only",
+  "serving_weights_changed": false,
+  "files": {
+    "both_fresh_fnn_history.csv": "5c6646c6a2159c5becd768f069b98d6bb7b44801105eb5f4df664b51fea6c705",
+    "both_fresh_fnn_predictions.csv": "b80db7780b500cb4c54829d41ff2743d7f367b6f34921698806a64bfb05aed13",
+    "cell_fresh_fnn_history.csv": "e780a622afc4ab60141c7077a4782ee70c535712f45eb936d645fdcd8ef5241c",
+    "cell_fresh_fnn_predictions.csv": "fa2898a430745008f7e0e97a0c03dd3174b5d23d3d9b4b83f75ff3bddbe945d0",
+    "drug_fresh_fnn_history.csv": "a81b22fb1239ecce058f337ac234f6a5de84e9eb23cbc49b41564e8bf41bc504",
+    "drug_fresh_fnn_predictions.csv": "e2268f93a55851ec5385f4e00ec071799a3dc32f127c9b9f1d371dbdaf91c765",
+    "pair_fresh_fnn_history.csv": "0b6ce8b684c31d5a47d23083337f0d580ae0bc7f20e79f19654aa3f13487faf2",
+    "pair_fresh_fnn_predictions.csv": "c2f3c7dc2fff368fc7bc8dde4e8f81a5950d6e0593bf081b83bea313e9515f89",
+    "fnn_summary.csv": "26f30e5834de91309d6f8be20547324be7fb91134f75c11accdb656883570443",
+    "fnn_within_cell_rankings.csv": "b95aa71102329b3d8557a859c920b7cf5e2acbacff59b8223eadcffe1abe8fd5"
+  }
+}
