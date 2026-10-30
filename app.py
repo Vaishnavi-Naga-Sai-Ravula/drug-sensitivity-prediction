@@ -10,6 +10,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from pathdsp.section_content import OVERVIEW_CARDS, OVERVIEW_BLOCKS, METHODS_SCIENCE
+from pathdsp.interactive import attribution_chart, show_gallery
+from pathdsp.workspace_report import record_output
 from pathdsp.interface import apply_theme, molecular_intro, searchable_pair, present_plot
 from pathdsp.inference import infer_features, pair_scope
 from pathdsp.validation import read_feature_upload
@@ -235,34 +238,23 @@ def train_from_app(bundle, max_epochs: int, split_mode: str, status) -> dict:
 page = st.radio("Workspace section", ["Overview", "Predict", "Evaluation", "Explainability", "Methods & deploy"], horizontal=True, key="navigation", label_visibility="collapsed")
 
 
-molecular_intro(page)
+if page != "Evaluation":
+    molecular_intro(page)
 
 if page == "Overview":
     def open_prediction():
         st.session_state["navigation"] = "Predict"
     st.button("Enter the prediction lab →", type="primary", on_click=open_prediction)
     cards = st.columns(3)
-    for col, step, title, description in zip(cards, ("01 / EXPLORE", "02 / PREDICT", "03 / UNDERSTAND"),
-            ("Find your pair", "Connect the pathways", "See what drives it"),
-            ("Search the bundled drug and cell-line catalogues.", "Run the saved neural network on five feature groups.", "Inspect group contributions and feature explanations.")):
+    for col, (step,title,description) in zip(cards,OVERVIEW_CARDS):
         col.markdown(f'<div class="workflow-card"><small>{step}</small><h3>{title}</h3><p>{description}</p></div>', unsafe_allow_html=True)
 
     st.subheader("From a question to an evidence trail")
     left, right = st.columns(2)
     with left:
-        st.markdown("""### Explore a research question
-Search for a drug and a cancer **cell line**, compare model estimates with available measurements, then inspect alternatives ranked for the same cell line. Evaluation brings the comparisons, pathway attributions and downloadable evidence together.
-
-### What the model reads
-Chemical fingerprints describe drug chemistry. DG-Net describes drug-target pathway enrichment. Expression, mutation and copy-number pathway features describe the cell line. They are numeric features, not a one-drug-per-pathway assignment.
-""")
+        st.markdown(OVERVIEW_BLOCKS[0])
     with right:
-        st.markdown("""### Understand before interpreting
-An explanation shows how the model used its inputs; it does not prove that a pathway causes drug response. Predicted IC50 comparisons are exploratory and do not include achievable exposure, toxicity or patient outcomes.
-
-### Keep a reproducible record
-Download populated feature examples from Predict. In Evaluation, export a structured report and a complete evidence bundle with prediction tables, visualizations, SHAP values, model identity and known limitations. No patient health information is present in this dataset.
-""")
+        st.markdown(OVERVIEW_BLOCKS[1])
 
 elif page == "Predict":
     st.title("Predict drug response")
@@ -326,22 +318,17 @@ elif page == "Predict":
             "model_split": pair_scope(source,drug,cell),
             "dose_duration_cost_status": "Not determined from cell-line IC50",
         }])
+        from pathdsp.workspace_report import record_output
+        record_output(st.session_state,"predict",{"prediction":result,"group_shap":pd.DataFrame({"feature_group":list(saved_prediction["groups"]),"shap_value":list(saved_prediction["groups"].values())})},{"dataset":source,"drug":drug,"cell":cell,"model_sha256":result.iloc[0]["model_sha256"]})
         st.download_button("Download this prediction", result.to_csv(index=False), "pathdsp_prediction.csv", "text/csv")
         from pathdsp.ic50 import render_ic50_interpretation
-        render_ic50_interpretation(bundle, drug, predicted, actual)
+        scale_tables = render_ic50_interpretation(bundle, drug, predicted, actual)
+        record_output(st.session_state,"predict_scale",scale_tables,{"dataset":source,"drug":drug,"cell":cell,"model_sha256":result.iloc[0]["model_sha256"]})
         group_values = saved_prediction["groups"]
         shap_frame = pd.DataFrame({"Feature group": list(group_values), "SHAP value": list(group_values.values())})
         shap_frame["Absolute contribution"] = shap_frame["SHAP value"].abs()
         shap_frame = shap_frame.sort_values("Absolute contribution", ascending=True)
-        fig, ax = plt.subplots(figsize=(8, 4.3))
-        ax.barh(shap_frame["Feature group"], shap_frame["SHAP value"],
-                color=[PALETTE["teal"] if value >= 0 else PALETTE["rose"] for value in shap_frame["SHAP value"]])
-        ax.axvline(0, color="#52606d", linewidth=0.8)
-        ax.set_xlabel("Contribution to predicted −log10(IC50)")
-        ax.set_title("Exact SHAP values by PathDSP feature group")
-        fig.tight_layout()
-        present_plot(fig)
-        plt.close(fig)
+        show_gallery({'prediction_group_shap':attribution_chart(shap_frame,'Feature group','SHAP value','Exact SHAP by feature group')},dark=st.session_state.get('dark_mode',False))
         st.caption("Positive SHAP contribution raises predicted −log10(IC50), corresponding to lower IC50 under the source transform. These are model associations, not causal effects.")
 
     st.markdown("---")
@@ -349,6 +336,7 @@ elif page == "Predict":
     st.caption("The file must contain all model feature columns with the same definitions and units. Blank values (up to 20% per row) use training medians. Nonnumeric or infinite features are rejected. Limit: 2,048 rows / 20 MB.")
     from pathdsp.evaluation import sample_features
     example = sample_features(bundle)
+    record_output(st.session_state,"predict_sample",{"populated_feature_sample":example},{"dataset":source,"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")})
     st.download_button("Download populated feature example (CSV)", example.to_csv(index=False), "pathdsp_feature_example.csv", "text/csv")
     st.download_button("Download populated feature example (TSV)", example.to_csv(index=False, sep="\t"), "pathdsp_feature_example.tsv", "text/tab-separated-values")
     st.caption("The example contains five real drug–cell feature rows, every required model feature, and identifier columns. It can be uploaded directly. Response targets are deliberately excluded from model inputs.")
@@ -363,6 +351,8 @@ elif page == "Predict":
             out = input_frame.copy()
             out["predicted_neglog10_ic50"] = batch_pred
             out["predicted_ic50_uM_assuming_source_unit"] = np.power(10.0, -np.clip(batch_pred, -20, 20))
+            from pathdsp.workspace_report import record_output
+            record_output(st.session_state,"batch",{"batch_predictions":out},{"dataset":source,"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")})
             st.dataframe(out.head(100), width="stretch")
             st.download_button("Download all predictions", out.to_csv(index=False), "pathdsp_batch_predictions.csv", "text/csv")
         except (ValueError, RuntimeError) as exc:
@@ -415,6 +405,8 @@ elif page == "Explainability":
         drug, cell, predicted_target, baseline_target, observed_target, group_values
     )
     st.markdown(group_report)
+    from pathdsp.workspace_report import record_output
+    record_output(st.session_state,"explainability",{"group_shap":group_frame},{"drug":drug,"cell":cell,"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")},text=group_report)
     st.download_button("Download local SHAP interpretation report (.md)", group_report,
                        "local_shap_interpretation_report.md", "text/markdown", key="download_group_shap_report")
 
@@ -443,16 +435,9 @@ elif page == "Explainability":
         )
         st.subheader("Feature-level local explanation report")
         st.markdown(local_report)
+        record_output(st.session_state,"explainability",{"feature_shap":feature_frame},{"drug":drug,"cell":cell,"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")},text=local_report)
         display_frame = feature_frame.assign(magnitude=feature_frame["shap_value"].abs()).nlargest(25,"magnitude").sort_values("shap_value")
-        fig, ax = plt.subplots(figsize=(9, 7))
-        ax.barh(display_frame["feature"], display_frame["shap_value"],
-                color=[PALETTE["teal"] if v >= 0 else PALETTE["rose"] for v in display_frame["shap_value"]])
-        ax.axvline(0, color="#52606d", linewidth=0.8)
-        ax.set_title("Feature-level SHAP values (top 25 by absolute contribution)")
-        ax.set_xlabel("Contribution to predicted −log10(IC50)")
-        fig.tight_layout()
-        present_plot(fig)
-        plt.close(fig)
+        show_gallery({'explain_feature_shap':attribution_chart(display_frame,'feature','shap_value','Feature SHAP · top 25 contributions')},dark=st.session_state.get('dark_mode',False))
         st.download_button("Download local feature SHAP values (.csv)", feature_frame.to_csv(index=False),
                            "feature_shap_values.csv", "text/csv", key="download_local_feature_shap")
         st.download_button("Download feature-level interpretation report (.md)", local_report,
@@ -463,8 +448,7 @@ elif page == "Explainability":
     if feature_summary_path.is_file():
         st.subheader("Global feature-level SHAP on sampled GDSC pairs")
         feature_summary = pd.read_csv(feature_summary_path)
-        if feature_figure_path.is_file():
-            st.image(str(feature_figure_path), caption="Top pathway and fingerprint features by mean absolute SHAP value", width="stretch")
+        show_gallery({"global_feature_shap":attribution_chart(feature_summary.head(25),"feature","mean_absolute_shap","Global feature SHAP · top 25")},dark=st.session_state.get("dark_mode",False))
         st.dataframe(feature_summary.head(10), width="stretch", hide_index=True)
         st.download_button("Download global feature SHAP summary", feature_summary_path.read_bytes(),
                            "global_feature_shap.csv", "text/csv")
@@ -503,13 +487,8 @@ elif page == "Explainability":
         ])
         global_report = "\n".join(report_lines)
         st.markdown(global_report)
-        fig, ax = plt.subplots(figsize=(8, 4.5))
-        ax.barh(global_frame["feature_group"], global_frame["mean_absolute_group_shap"], color=PALETTE["blue"])
-        ax.set_xlabel("Mean absolute group SHAP value")
-        ax.set_title("Global contribution by feature group")
-        fig.tight_layout()
-        present_plot(fig)
-        plt.close(fig)
+        record_output(st.session_state,"explainability",{"global_group_shap":global_frame,"global_feature_shap":feature_summary},{"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")},text=global_report)
+        show_gallery({'global_group_shap':attribution_chart(global_frame,'feature_group','mean_absolute_group_shap','Global group SHAP')},dark=st.session_state.get('dark_mode',False))
         st.download_button("Download global group SHAP summary", global_path.read_bytes(),
                            "global_group_shap.csv", "text/csv")
         st.download_button("Download global SHAP interpretation report (.md)", global_report,
@@ -518,22 +497,16 @@ elif page == "Explainability":
 elif page == "Methods & deploy":
     st.title("Methods, training and deployment")
     st.markdown("### What the app implements")
-    st.markdown("""
-- **PathDSP features:** 256 Morgan fingerprint bits plus drug-target DG-Net and cell-line EXP, MUT-Net and CNV-Net pathway features.
-- **Response:** regression on the supplied `negLog10IC50` matrix. For display, IC50 is calculated as `10 ** (-target)` in μM, assuming the source file used μM before transformation.
-- **Model:** the author's fully connected network dimensions (1000, 800, 500, 100), ELU activations and dropout, with training-only feature z-scoring, early stopping and held-out evaluation.
-- **RWR:** Random Walk with Restart is the method used by NetPEA to make the supplied DG-Net, MUT-Net and CNV-Net features. The upstream processed matrices are included, and `pathdsp/rwr.py` contains a reusable diffusion implementation. The app does not claim to rerun NetPEA's 1,000-permutation pathway normalization.
-- **SHAP:** exact Shapley values across the five feature groups are always available. Feature-level Gradient SHAP (expected gradients) is available when `shap` is installed.
-- **Classification-style charts:** ROC/AUC and confusion matrix use the GDSC training median as an exploratory threshold. The research paper uses regression because there is no universal sensitive/resistant cutoff.
-""")
+    st.markdown(METHODS_SCIENCE)
     st.info("The active research checkpoint was trained with scripts/train_mse.py using Xavier initialization, AdamW and MSE loss. The evaluated checkpoint is served directly, with no final refit on held-out rows. The older train.py workflow remains a separate legacy experiment.")
     st.markdown("### Train or retrain")
     st.caption("Training takes place locally or in the app process. It uses the supplied GDSC matrices and writes `artifacts/model.pt`, `artifacts/metadata.json` and evaluation outputs.")
     col1, col2 = st.columns(2)
-    epochs = col1.slider("Maximum epochs", 5, 100, 30, 5)
+    epochs = col1.slider("Maximum epochs", 5, 100, 30, 5, key="research_epochs")
     split_mode = col2.selectbox("Holdout strategy", ["pair", "cell", "drug"], index=0,
-                                help="Pair split matches the paper's random pair evaluation. Cell/drug holdouts probe harder generalization settings.")
+                                help="Pair split matches the paper's random pair evaluation. Cell/drug holdouts probe harder generalization settings.",key="research_split")
     training_enabled = os.environ.get("PATHDSP_ENABLE_TRAINING") == "1"
+    record_output(st.session_state,"methods",{"training_configuration":pd.DataFrame([{"max_epochs":epochs,"split_mode":split_mode,"training_enabled":training_enabled}])},{"model_sha256":artifact_digest(ARTIFACT_DIR/"model.pt")})
     if not training_enabled:
         st.info("Serving mode: in-app retraining is disabled to protect the active model and shared resources. Run train.py offline, validate a candidate, and deploy its complete artifact bundle. For a local research session only, set PATHDSP_ENABLE_TRAINING=1 before starting.")
     if st.button("Train model and generate evaluation outputs", type="primary", disabled=not training_enabled):

@@ -97,7 +97,9 @@ def render_ic50_interpretation(bundle, drug, predicted_target, observed_target):
     st.subheader('Understand the IC50 scale')
     st.markdown(INTERPRETATION)
     st.caption('The μM unit is inherited from the assumed source transformation. There are no validated patient-response or safe-dose cutoffs in this dataset. A one-unit change in −log10(IC50) is a tenfold concentration change.')
-    for figure in figures.values():st.image(figure['png'],caption=figure['title'],width='stretch')
+    from .interactive import ic50_charts, show_gallery
+    response=bundle.meta.copy();response['actual_neglog10_ic50']=bundle.y
+    show_gallery(ic50_charts(response,drug,predicted_target,observed_target),dark=st.session_state.get('dark_mode',False))
     with st.expander('Concentration reference table and same-drug context'):
         st.dataframe(tables['ic50_scale_reference'],hide_index=True,width='stretch')
         st.dataframe(tables['ic50_same_drug_context'],hide_index=True,width='stretch')

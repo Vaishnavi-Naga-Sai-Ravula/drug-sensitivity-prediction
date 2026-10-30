@@ -145,7 +145,7 @@ accuracy by themselves. The FNN remains a baseline with known CCLE transfer limi
 
 Choose **Prepare complete report and evidence bundle** in Evaluation. The standalone
 HTML report includes every evaluation figure, reference-drug comparisons, complete
-expandable data tables, SHAP graphs, metric/audit records and model identity.
+embedded CSV data with table previews, SHAP graphs, metric/audit records and model identity.
 The ZIP includes the same HTML plus every table as CSV and every figure as PNG.
 On-screen previews and filters do not truncate the exported data. Open the HTML
 in a browser to read or print it. No patient health records exist in these inputs;
@@ -196,3 +196,57 @@ and all regenerated files before a release; these commands do not publish or
 replace the serving bundle. Restart serving processes after deploying a complete
 reviewed bundle. `outputs/mse_training_comparison.json` records the current trial,
 the prior baseline, the screenshot example's fitting-set role and the CCLE trade-off.
+
+## Hover coordinates and complete workspace reports
+
+Evaluation is now a compact tables-and-charts workspace. Data plots use the same
+interactive chart definitions in the app and the downloadable HTML report.
+Move within a plotting area to read cursor coordinates in axis units, including
+physical concentration values on logarithmic axes. Hover data marks for the exact
+recorded values, identifiers, bin counts, SHAP contributions or correlations.
+A cursor position in empty plot space is not an additional measurement.
+
+The report embeds the chart library and works offline in a normal JavaScript-enabled
+browser. PDF/print and PNG copies are static; use the HTML for hover, zoom and pan.
+The evidence ZIP retains the original PNGs and adds interactive chart definitions.
+All CSV rows remain included. Large HTML tables show small previews and embed a
+complete downloadable CSV to avoid constructing millions of browser table cells.
+
+The report covers all five workspace sections: overview/scientific illustration,
+generated Predict results and batches, Evaluation, Explainability, and scientific
+methods/model metadata. Deployment/run instructions are excluded. Results generated
+in the current browser session are recorded with their original pair/model context;
+analyses not run are explicitly marked as not generated. Closing/resetting the
+session does not reconstruct previous unsaved session outputs. Download a report
+before closing if you need those records. No patient health data or treatment
+outcomes are invented; clinical limitations remain visible as table rows.
+
+After applying this update, install requirements to add Plotly, then restart the
+app. No model retraining is needed for these presentation/export changes.
+
+Optional browser regression checks (install Playwright and Chromium separately):
+
+```bash
+python scripts/check_chart_hover.py --url http://127.0.0.1:8501
+```
+
+The check uses an isolated browser session and a temporary loopback report server.
+It checks axis coordinates, full exported data, generated batch/SHAP snapshots,
+light/dark rendering and offline report interaction. A system Chromium path can
+be supplied with `--chromium-path`; otherwise Playwright's installed browser is used.
+
+
+### Separate Evaluation display from the complete report
+
+Evaluation displays exactly three coordinate-enabled charts: the filtered held-out
+scatter, GDSC held-out hexagonal-density agreement, and CCLE external hexagonal-density
+agreement. The two density views keep their fixed axes and expose bin-center
+coordinates and pair counts on hover. All Evaluation tables remain available.
+
+The report is intentionally broader than the page: it includes those three graphs,
+all additional diagnostics/IC50/SHAP/training charts, every Evaluation table and key
+statistic, generated session outputs, shared Overview and Methods scientific text,
+and the complete SHAP interpretation guide. Deployment instructions are excluded.
+A table coverage inventory and clickable contents make missing exports detectable
+and the complete report navigable. No model retraining or accuracy claims are made
+by this display/export update.

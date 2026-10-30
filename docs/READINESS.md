@@ -6,7 +6,7 @@ accuracy, and operational production readiness are separate properties.
 
 ## What was checked
 
-- Twenty-three integration/unit tests: navigation/search in both datasets, theme switching,
+- Twenty-nine integration/unit tests: navigation/search in both datasets, theme switching,
   prediction/observation separation, malformed/missing/infinite upload rejection,
   batch limits, archive-only loading, CSV feature-order consistency, serving-mode
   training protection, artifact corruption, external-transfer warnings, API readiness
@@ -135,3 +135,29 @@ embeds every figure and full expandable tables. The ZIP contains untruncated CSV
 and PNGs. Browser validation downloaded and reopened the report and checked all
 embedded images. Separate CCLE pair evaluation, rankings and pathway SHAP were
 also exercised. No patient health records or treatment efficacy were inferred.
+
+
+## Interactive coordinate/report validation
+
+The trained model and statistical results are unchanged by this presentation update.
+All existing evaluation PNG figures have data-backed interactive equivalents.
+Regression checks verify complete holdout/external scatter point counts, histogram
+counts, confusion-matrix totals, correlation values, safe JSON embedding, complete
+embedded CSV exports and immutable capture of generated session results.
+
+Browser checks exercised linear, logarithmic, categorical and second-subplot
+coordinates, real batch/SHAP generation and report downloads in light/dark themes.
+The downloaded HTML was reopened with external requests blocked: coordinate
+readouts and the correlation heatmap worked without a CDN or inference server.
+Scientific cursor positions are differentiated from exact observed data marks.
+Report previews do not limit CSV rows. The report includes five-section scientific
+content and generated session outputs; deployment instructions are excluded.
+Printed/PDF/PNG output is static, so pointer interactions require the HTML report.
+
+
+The Evaluation page now renders only the three specified agreement plots, while
+all charts remain in the report. Density-bin totals are verified against every
+GDSC/CCLE evaluation row, and every UI table is registered in the shared export
+payload and its completeness inventory. Shared Overview/Methods text prevents
+app/report drift. The report includes the complete interpretation guide and
+captured generated reports; missing patient/clinical data are never invented.

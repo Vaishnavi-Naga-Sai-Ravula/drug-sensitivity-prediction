@@ -7,6 +7,7 @@ from pathlib import Path
 import base64
 import hashlib
 import json
+import re
 import zipfile
 import numpy as np
 import pandas as pd
@@ -83,6 +84,7 @@ def build_evaluation(bundle, model, metadata, drug, cell):
               'local_feature_shap':features, 'local_pathway_shap':pathways}
     for path in sorted(OUTPUTS.glob('*.csv')):
         tables['saved_' + path.stem] = pd.read_csv(path)
+    from .interactive import add_chart_source_tables
     metrics = json.loads((OUTPUTS/'metrics.json').read_text(encoding='utf-8'))
     audits = {path.stem:json.loads(path.read_text(encoding='utf-8')) for path in sorted(OUTPUTS.glob('*.json')) if path.name != 'metrics.json'}
     context = {'dataset':bundle.name,'drug':drug,'cell':cell,
@@ -99,7 +101,11 @@ def build_evaluation(bundle, model, metadata, drug, cell):
     tables.update(scale_tables)
     figures = make_figures(tables, bundle.y)
     figures.update(scale_figures)
-    return {'context':context, 'metrics':metrics, 'audits':audits, 'tables':tables, 'figures':figures}
+    payload={'context':context, 'metrics':metrics, 'audits':audits, 'tables':tables, 'figures':figures}
+    add_chart_source_tables(payload,bundle)
+    payload['model_metadata']=metadata
+    add_evaluation_tables(payload)
+    return payload
 
 
 def make_figures(tables, response):
@@ -193,11 +199,37 @@ def readable_rankings(frame):
             'absolute_log_error':'Absolute log error','patient_health_status':'Patient health status'}
     return frame[list(labels)].rename(columns=labels)
 
+
+def add_evaluation_tables(payload):
+    """Define once: on-screen tables and complete exports cannot drift apart."""
+    tables=payload['tables']
+    tables['evaluation_selected_pair']=readable_selected_pair(tables['selected_pair'])
+    tables['evaluation_drug_comparisons']=readable_rankings(tables['cell_line_drug_rankings'])
+    rows=[]
+    for scope,metrics in [('GDSC holdout',payload['metrics'].get('holdout',{})),('CCLE external',payload['metrics'].get('ccle_external',{}))]:
+        rows.append({'Scope':scope,'MAE':metrics.get('mae_neglog10_ic50'),'RMSE':metrics.get('rmse_neglog10_ic50'),'R²':metrics.get('r2'),'Pairs':metrics.get('n_test')})
+    tables['evaluation_metric_summary']=pd.DataFrame(rows)
+    tables['evaluation_interpretation_notes']=pd.DataFrame([
+        {'Item':'Comparison basis','Value':'Lower predicted IC50 ranks research candidates; it does not establish clinical efficacy or safety.'},
+        {'Item':'Patient health, safe dose, duration, risk and cost','Value':'Unavailable from these cell-line data; no patient treatment recommendation.'},
+        {'Item':'Chart values','Value':'Hover marks for exact values; move anywhere inside axes for cursor coordinates. Density-bin centers aggregate observations and are not individual patient records.'},
+        {'Item':'External reliability','Value':'CCLE transfer remains poor; the historical holdout has been reused for model selection.'},
+        {'Item':'Source units','Value':'μM is inherited from the source-unit assumption. A response distribution is not a dose–response curve.'},
+    ])
+    names=['evaluation_selected_pair','evaluation_drug_comparisons','local_group_shap','local_pathway_shap','local_feature_shap','evaluation_metric_summary','ic50_scale_reference','ic50_same_drug_context','clinical_dose_duration_cost_availability','evaluation_interpretation_notes']
+    names+=sorted(name for name in tables if name.startswith('saved_'))
+    tables['evaluation_table_inventory']=pd.DataFrame([{'Table':name,'Rows':len(tables[name]),'Columns':len(tables[name].columns),'Export':'Complete embedded CSV and ZIP CSV'} for name in names])
+
 def render_report(payload):
+    from .workspace_report import attach_workspace_outputs, full_table_download, section_content, TABLE_PAGER_SCRIPT
+    from .interactive import build_charts, gallery_html
+    if 'workspace_section_coverage' not in payload['tables']:
+        attach_workspace_outputs(payload,{})
     context=payload['context'];tables=payload['tables'];selected=tables['selected_pair'].iloc[0]
     lower=tables['cell_line_drug_rankings'][tables['cell_line_drug_rankings']['predicted_ic50_uM_assuming_source_unit'] < selected['predicted_ic50_uM_assuming_source_unit']]
-    parts=['<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PathDSP evaluation report</title><style>body{font:15px/1.6 system-ui,sans-serif;margin:40px auto;max-width:1100px;padding:0 24px;color:#18394c;background:#fff}h1,h2,h3{line-height:1.2}h2{margin-top:40px;border-bottom:2px solid #b6dadb;padding-bottom:12px}.notice{padding:18px;background:#fff2df;border-left:4px solid #c36b54}.scope{padding:18px;background:#edf7f8}table{border-collapse:collapse;width:100%;font-size:12px}td,th{padding:8px;border:1px solid #d1e2e9;text-align:left}th{background:#edf7f8}.scroll{overflow-x:auto}figure{margin:28px 0;break-inside:avoid}img{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}details{margin:18px 0}summary{cursor:pointer;font-weight:600}@media print{body{margin:0;max-width:none}details>summary{page-break-after:avoid}img{max-height:80vh}a{color:inherit}}</style><body>']
-    parts += ['<h1>PathDSP · Cell-line research evaluation</h1>',f'<p>{escape(context["dataset"])} · {escape(context["drug"])} × {escape(context["cell"])}</p>',f'<p>Analysis snapshot {escape(datetime.fromisoformat(context["generated_at_utc"]).astimezone(ZoneInfo("Asia/Kolkata")).isoformat())} (India time) · Model {escape(context["model_sha256"][:16])}</p>',f'<div class="notice">{escape(LIMITATION)}</div>']
+    parts=['<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PathDSP workspace research report</title><style>body{font:15px/1.6 system-ui,sans-serif;margin:40px auto;max-width:1100px;padding:0 24px;color:#18394c;background:#fff}h1,h2,h3{line-height:1.2}h2{margin-top:40px;border-bottom:2px solid #b6dadb;padding-bottom:12px}.notice{padding:18px;background:#fff2df;border-left:4px solid #c36b54}.scope{padding:18px;background:#edf7f8}table{border-collapse:collapse;width:100%;font-size:12px}td,th{padding:8px;border:1px solid #d1e2e9;text-align:left}th{background:#edf7f8}.scroll{overflow-x:auto}figure{margin:28px 0;break-inside:avoid}img{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}details{margin:18px 0}summary{cursor:pointer;font-weight:600}@media print{body{margin:0;max-width:none}details>summary{page-break-after:avoid}img{max-height:80vh}a{color:inherit}}</style><body>']
+    parts += ['<h1>PathDSP · Workspace research report</h1>',f'<p>{escape(context["dataset"])} · {escape(context["drug"])} × {escape(context["cell"])}</p>',f'<p>Analysis snapshot {escape(datetime.fromisoformat(context["generated_at_utc"]).astimezone(ZoneInfo("Asia/Kolkata")).isoformat())} (India time) · Model {escape(context["model_sha256"][:16])}</p>',f'<div class="notice">{escape(LIMITATION)}</div>']
+    parts += ['<h2>Key validation statistics</h2>',tables['evaluation_metric_summary'].to_html(index=False,escape=True),'<details><summary>Evaluation table coverage · completeness audit</summary>',tables['evaluation_table_inventory'].to_html(index=False,escape=True),'</details>',tables['evaluation_interpretation_notes'].to_html(index=False,escape=True)]
     parts += ['<h2>1. Selected pair: measurement and model estimate</h2>', '<p>Observed and predicted columns are separate. Missing measurements remain blank. Patient health status is explicitly unavailable, not inferred.</p>', '<div class="scroll">'+readable_selected_pair(tables['selected_pair']).to_html(index=False,na_rep='Unavailable',escape=True)+'</div>']
     if len(lower):
         message=f'{len(lower)} drugs have a lower predicted IC50 than the selected drug for this cell line. These are candidates for further research, not evidence of better clinical treatment.'
@@ -207,17 +239,32 @@ def render_report(payload):
     parts += ['<h2>2. Comparative drug ranking</h2>',f'<p>{escape(message)}</p>','<p>All eligible drugs are included below. Ranking does not account for toxicity, dose feasibility, uncertainty or patient biology.</p>','<div class="scroll">'+readable_rankings(tables['cell_line_drug_rankings']).to_html(index=False,na_rep='Unavailable',escape=True,float_format=lambda value:f'{value:.5g}')+'</div>']
     parts += ['<h2>3. Pathway and SHAP interpretation</h2>','<p>No one-to-one drug–pathway assignment is supplied. The following are model attributions for the selected drug–cell pair. Positive SHAP raises −log10(IC50), corresponding to lower estimated IC50; negative SHAP moves it in the opposite direction. Feature SHAP is approximate; group SHAP is exact over five groups.</p>',f'<p>{escape(context["feature_shap_status"])}</p>',tables['local_group_shap'].to_html(index=False,escape=True),'<h3>Largest pathway contributions</h3>',tables['local_pathway_shap'].head(25).to_html(index=False,escape=True),f'<p>Exact group additivity residual: {context["group_shap_additivity_residual"]:.3g}.</p>']
     parts += ['<h2>4. All evaluation visualizations</h2>','<p>The active release serves the same checkpoint used for the displayed GDSC holdout and CCLE evaluation. Fit/validation/holdout membership is recorded; the holdout has been reused for model selection and is not an independent final certification. The response distribution is not a concentration–response dose curve.</p>']
+    parts.append('<p>Move the pointer anywhere within a plotting area to read axis coordinates; hover marks for exact data, counts or correlations. Log axes report concentrations in their displayed units. Cursor positions are not additional measurements. These interactions work offline in this HTML; printed/PDF copies are static.</p>')
+    parts.append(gallery_html(build_charts(payload)))
+    parts.append('<style>.print-only{display:none}@media print{.print-only{display:block}iframe{display:none}}</style><div class="print-only">')
     for figure in payload['figures'].values():
         encoded=base64.b64encode(figure['png']).decode('ascii')
         parts.append(f'<figure><h3>{escape(figure["title"])}</h3><img alt="{escape(figure["title"])}" src="data:image/png;base64,{encoded}"></figure>')
+    parts.append('</div>')
     parts += ['<h2>5. Metrics, audit evidence and reproducibility</h2>', '<p>Overall scores refer to the complete saved evaluation sets. Rankings are for the chosen cell line. These scopes must not be combined into a single accuracy claim.</p>', '<pre>'+escape(json.dumps(payload['metrics'],indent=2))+'</pre>']
     for name,audit in payload['audits'].items():
         parts.append(f'<details><summary>{escape(name)}</summary><pre>{escape(json.dumps(audit,indent=2))}</pre></details>')
-    parts += ['<h2>6. Complete data tables</h2>','<p>Every row of every exported table is included below in expandable, horizontally scrollable tables and as a separate CSV in the evidence ZIP. Values are not truncated to the on-screen preview.</p>']
+    parts += ['<h2>6. Complete data tables</h2>','<p>Every row is retained in the embedded CSV download for each table and as a CSV in the evidence ZIP. Small previews keep this large report responsive; no export is limited to the preview rows.</p>']
     for name,table in tables.items():
-        parts.append(f'<details><summary>{escape(name)} · {len(table):,} rows × {len(table.columns):,} columns</summary><div class="scroll">{table.to_html(index=False,na_rep="Unavailable",escape=True)}</div></details>')
-    parts += ['<h2>7. Context and interpretation limits</h2>','<pre>'+escape(json.dumps(context,indent=2))+'</pre>', '<p>APIs can supply curated drug–target or pathway annotations, but API keys are access credentials, not model training or evidence of accuracy. FNN is a baseline; alternative models require study-aware validation and independent test data. No patient-specific treatment conclusions can be drawn from these cell-line features.</p></body></html>']
-    return '\n'.join(parts).encode('utf-8')
+        parts.append(full_table_download(name,table))
+    parts += ['<h2>7. Context and interpretation limits</h2>','<pre>'+escape(json.dumps(context,indent=2))+'</pre>', '<p>APIs can supply curated drug–target or pathway annotations, but API keys are access credentials, not model training or evidence of accuracy. FNN is a baseline; alternative models require study-aware validation and independent test data. No patient-specific treatment conclusions can be drawn from these cell-line features.</p>']
+    parts.append(section_content(payload))
+    parts.append(TABLE_PAGER_SCRIPT)
+    parts.append('</body></html>')
+    document='\n'.join(parts)
+    contents=[]
+    def section_anchor(match):
+        identifier='report-section-'+str(len(contents)+1)
+        contents.append('<li><a href="#'+identifier+'">'+match.group(1)+'</a></li>')
+        return '<h2 id="'+identifier+'">'+match.group(1)+'</h2>'
+    document=re.sub(r'<h2>(.*?)</h2>',section_anchor,document)
+    document=document.replace('</h1>','</h1><nav aria-label="Report contents"><strong>Report contents</strong><ul>'+''.join(contents)+'</ul></nav>',1)
+    return document.encode('utf-8')
 
 
 def evidence_zip(payload, report=None):
@@ -226,11 +273,16 @@ def evidence_zip(payload, report=None):
         archive.writestr('evaluation_report.html',report if report is not None else render_report(payload))
         archive.writestr('context.json',json.dumps(payload['context'],indent=2))
         archive.writestr('metrics.json',json.dumps(payload['metrics'],indent=2))
+        from .interactive import build_charts
+        archive.writestr('workspace_results.json',json.dumps(payload.get('workspace_results',[]),indent=2,default=str))
+        archive.writestr('model_metadata.json',json.dumps(payload.get('model_metadata',{}),indent=2))
+        for name,chart in build_charts(payload).items():
+            archive.writestr('interactive_charts/'+name+'.plotly.json',chart.to_json())
         for name,audit in payload['audits'].items():
             archive.writestr('audits/'+name+'.json',json.dumps(audit,indent=2))
         for name,table in payload['tables'].items():
             archive.writestr('tables/'+name+'.csv',table.to_csv(index=False))
         for name,figure in payload['figures'].items():
             archive.writestr('figures/'+name+'.png',figure['png'])
-        archive.writestr('README.txt','Open evaluation_report.html in a browser. It is self-contained and printable. Tables contain all rows; the dashboard may show shorter previews. No patient health records are supplied. Rankings and SHAP are exploratory cell-line model outputs, not treatment recommendations.\n')
+        archive.writestr('README.txt','Open evaluation_report.html in a browser. It is self-contained, interactive offline, and printable (printed/PDF charts are static). Tables contain all rows; the dashboard may show shorter previews. No patient health records are supplied. Rankings and SHAP are exploratory cell-line model outputs, not treatment recommendations.\n')
     return stream.getvalue()
